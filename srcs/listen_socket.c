@@ -48,7 +48,6 @@ int			listen_socket(const char *host, const int port)
 	struct addrinfo *result;
 	int				sock;
 	struct addrinfo *rp;
-	int				err;
 
 	if (!addrinfo_alloc_init(host, &result))
 	{

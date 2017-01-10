@@ -6,7 +6,7 @@
 bool	write_data (const int fd, const char *cmd, const size_t size)
 {
 	size_t	written;
-	int			nwritten;
+	ssize_t	nwritten;
 
 	written = 0;
 	while (written < size)
@@ -17,7 +17,7 @@ bool	write_data (const int fd, const char *cmd, const size_t size)
 			perror ("write");
 			return ( false );
 		}
-		written += nwritten;
+		written += (size_t)nwritten;
 	}
 	return ( true );
 }
@@ -67,6 +67,6 @@ void	private_log(const char *file,
 		buffer[buffer_size] = '\n';
 		buffer_size += 1;
 	}
-	write_data (2, buffer, buffer_size);
+	write_data(2, buffer, (size_t)buffer_size);
 }
 
