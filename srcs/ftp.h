@@ -45,7 +45,7 @@ typedef struct	s_user
 {
 	bool		used;
 
-	SOCKET		sock;
+	int			sock;
 
 	char		name[USER_NAME_SIZE_MAX + 1];
 
@@ -76,7 +76,7 @@ typedef struct	s_fifo
 
 typedef struct	s_ftp
 {
-	SOCKET		sock_listen;
+	int		sock_listen;
 
 	t_fifo	fifo;
 

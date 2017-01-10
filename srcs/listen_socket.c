@@ -24,8 +24,7 @@ static bool		addrinfo_alloc_init (const char *host,
 }
 
 #define SOCKET_BACKLOG_COUNT_MAX	1
-static bool	sock_bind(const SOCKET sock,
-							const int port)
+static bool	sock_bind(const int sock, const int port)
 {
 	struct sockaddr_in	sockaddr;
 	int					yes;
@@ -44,11 +43,12 @@ static bool	sock_bind(const SOCKET sock,
 	return (true);
 }
 
-SOCKET			listen_socket(const char *host, const int port)
+int			listen_socket(const char *host, const int port)
 {
-	struct addrinfo 	*result, *rp;
-	SOCKET				sock;
-	int					err;
+	struct addrinfo *result;
+	int				sock;
+	struct addrinfo *rp;
+	int				err;
 
 	if (!addrinfo_alloc_init(host, &result))
 	{

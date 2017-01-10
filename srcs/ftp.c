@@ -221,7 +221,7 @@ void	set_prepare(t_set *set, int *nfds)
 	}
 }
 
-int		sets_prepare(SOCKET listen, t_set *sets)
+int		sets_prepare(int listen, t_set *sets)
 {
 	int		nfds;
 	size_t	i;
@@ -272,9 +272,9 @@ bool	ftp_close(t_ftp *ftp)
 	return (true);
 }
 
-SOCKET	accept_connection(SOCKET sock_listen)
+int		accept_connection(int sock_listen)
 {
-	SOCKET				sock;
+	int					sock;
 	socklen_t			addr_size;
 	struct sockaddr_in	addr;
 
@@ -297,7 +297,7 @@ SOCKET	accept_connection(SOCKET sock_listen)
 bool	new_connection(t_ftp *ftp)
 {
 	t_user	*user;
-	SOCKET	sock;
+	int		sock;
 	ssize_t	size;
 
 	sock = accept_connection(ftp->sock_listen);

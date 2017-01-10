@@ -5,6 +5,6 @@
 #include "log.h"
 #include "sock.h"
 
-SOCKET	listen_socket(const char *host, const int listen_port);
+int	listen_socket(const char *host, const int listen_port);
 
 #endif
