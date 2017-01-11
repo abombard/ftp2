@@ -4,263 +4,6 @@
 
 static volatile bool	run = false;
 
-bool	fifo_empty(t_list *fifo)
-{
-	return (list_is_empty(fifo));
-}
-
-void	*fifo_pull(t_list *fifo)
-{
-	t_list	*elem;
-
-	if (list_is_empty(fifo))
-		return (NULL);
-	elem = list_nth(fifo, 1);
-	list_del(elem);
-	return ((void *)elem);
-}
-
-void	fifo_store(void *elem, t_list *fifo)
-{
-	t_list	*pos;
-
-	pos = (t_list *)elem;
-	list_push_front(pos, fifo);
-}
-
-bool	fifo_create(size_t size, size_t count, t_list *fifo)
-{
-	t_list	*elem;
-	size_t	i;
-
-	INIT_LIST_HEAD(fifo);
-	i = 0;
-	while (i < count)
-	{
-		elem = (void *)malloc(size);
-		if (elem == NULL)
-			return (false);
-		fifo_store(elem, fifo);
-		i++;
-	}
-	return (true);
-}
-
-void	fifo_destroy(t_list *fifo)
-{
-	t_list	*elem;
-
-	while (!list_is_empty(fifo))
-	{
-		elem = list_nth(fifo, 1);
-		list_del(elem);
-		free(elem);
-	}
-}
-
-void	data_teardown(t_data *data)
-{
-	data->fd = -1;
-	data->offset = 0;
-	data->size = 0;
-}
-
-void	data_update(char *s, size_t size, t_data *data)
-{
-	LOG_DEBUG("Starting");
-
-	if (data->size == MSG_SIZE_MAX)
-	{
-		data->bytes[MSG_SIZE_MAX - 1] = '$';
-		return ;
-	}
-
-	if (data->size + size > MSG_SIZE_MAX)
-	{
-		memcpy(data->bytes + data->size, s, MSG_SIZE_MAX - data->size - 1);
-		data->bytes[MSG_SIZE_MAX - 1] = '$';
-		data->size = MSG_SIZE_MAX - 1;
-	}
-	else
-	{
-		memcpy(data->bytes + data->size, s, size);
-		data->size += size;
-	}
-	data->bytes[data->size] = '\0';
-
-	LOG_DEBUG("data {%.*s}", (int)data->size, data->bytes);
-}
-
-static void	data_prefix(char *prefix, size_t prefix_size, t_data *data)
-{
-	size_t	size;
-
-	EASY_DEBUG_IN;
-	if (data->size + prefix_size > MSG_SIZE_MAX)
-	{
-		size = MSG_SIZE_MAX - prefix_size;
-		data->bytes[size - 1] = '$';
-		data->size = MSG_SIZE_MAX;
-	}
-	else
-	{
-		size = data->size;
-		data->size += prefix_size;
-	}
-	memmove(data->bytes + prefix_size, data->bytes, size);
-	memcpy(data->bytes, prefix, prefix_size);
-	data->bytes[data->size] = '\0';
-	LOG_DEBUG("data {%.*s}", (int)data->size, data->bytes);
-}
-
-void	data_success(t_data *data)
-{
-	data_prefix(FTP_SUCCESS " ", sizeof(FTP_SUCCESS " ") - 1, data);
-	data->bytes[data->size] = '\n';
-	data->size++;
-}
-
-void	data_error(t_data *data)
-{
-	data_prefix(FTP_ERROR " ", sizeof(FTP_ERROR " ") - 1, data);
-	data->bytes[data->size] = '\n';
-	data->size++;
-}
-
-#include "strerror.h"
-void	data_errno(int err_num, t_data *data)
-{
-	char	*err;
-
-	data_teardown(data);
-	err = strerror(err_num);
-	if (err == NULL)
-	{
-		LOG_ERROR("strerror failed");
-		return ;
-	}
-	data_update(err, strlen(err), data);
-}
-
-void	data_send(t_user *user)
-{
-	user->nextfds = WFDS;
-}
-
-char	*fds_tostring(t_fds fds)
-{
-	static char	*tostring[] = {
-		[NOFDS] = "NOFDS",
-		[WFDS] = "WFDS",
-		[RFDS] = "RFDS",
-		[EFDS] = "EFDS"
-	};
-	int			i;
-
-	i = (int)fds;
-	if (i < 0 || (size_t)i >= sizeof(tostring) / sizeof(tostring[0]))
-		return ("fds_tostring Error");
-	return (tostring[i]);
-}
-
-t_user	*user_new(t_fifo *fifo)
-{
-	t_user	*user;
-
-	if (fifo_empty(&fifo->users))
-		LOG_FATAL("fifo->users is empty");
-	if (fifo_empty(&fifo->datas))
-		LOG_FATAL("fifo->datas is empty");
-	user = fifo_pull(&fifo->users);
-	user->used = true;
-	user->sock = -1;
-	user->name[0] = '\0';
-	user->home[0] = '\0';
-	user->pwd[0] = '\0';
-	user->fds = NOFDS;
-	user->nextfds = NOFDS;
-	user->data.bytes = fifo_pull(&fifo->datas);
-	data_teardown(&user->data);
-	INIT_LIST_HEAD(&user->set);
-	return (user);
-}
-
-void	user_del(t_fifo *fifo, t_user *user)
-{
-	EASY_DEBUG_IN;
-	list_del(&user->set);
-	socket_close(user->sock);
-	fifo_store(user->data.bytes, &fifo->datas);
-	fifo_store(user, &fifo->users);
-}
-
-void	user_show(t_user *user)
-{
-	printf("User: %s\nhome: %s\npwd %s\nfds: %s nextfds %s\n", user->name, user->home, user->pwd, fds_tostring(user->fds), fds_tostring(user->nextfds));
-	if (user->data.fd == -1)
-		printf("data_type DATA_TYPE_MSG\ndata {%.*s}\n", (int)user->data.size, user->data.bytes);
-	else
-		printf("data_type DATA_TYPE_FILE\nfile fd %d offset %zu size %zu\n", user->data.fd, user->data.offset, user->data.size);
-}
-
-void	set_teardown(t_set *set)
-{
-	INIT_LIST_HEAD(&set->users);
-	FD_ZERO(&set->fds);
-}
-
-void	sets_teardown(t_set *sets)
-{
-	set_teardown(&sets[NOFDS]);
-	set_teardown(&sets[RFDS]);
-	set_teardown(&sets[WFDS]);
-	set_teardown(&sets[EFDS]);
-}
-
-void	set_move(t_user *user, t_set *sets)
-{
-	EASY_DEBUG_IN;
-	LOG_DEBUG("user->fds %s nextfds %s", fds_tostring(user->fds), fds_tostring(user->nextfds));
-	user->fds = user->nextfds;
-	list_move(&user->set, &sets[user->fds].users);
-	user->nextfds = NOFDS;
-	EASY_DEBUG_OUT;
-}
-
-void	set_prepare(t_set *set, int *nfds)
-{
-	t_user	*user;
-	t_list	*pos;
-
-	FD_ZERO(&set->fds);
-	pos = &set->users;
-	while ((pos = pos->next) != &set->users)
-	{
-		user = CONTAINER_OF(pos, t_user, set);
-		FD_SET(user->sock, &set->fds);
-		LOG_DEBUG("add sock %d to %s", user->sock, fds_tostring(user->fds));
-		if (user->sock > *nfds - 1)
-			*nfds = user->sock + 1;
-	}
-}
-
-int		sets_prepare(int listen, t_set *sets)
-{
-	int		nfds;
-
-	LOG_DEBUG("WFDS: %zu", list_size(&sets[WFDS].users));
-	LOG_DEBUG("RFDS: %zu", list_size(&sets[RFDS].users));
-	LOG_DEBUG("EFDS: %zu", list_size(&sets[EFDS].users));
-	nfds = 0;
-	set_prepare(&sets[WFDS], &nfds);
-	set_prepare(&sets[RFDS], &nfds);
-	set_prepare(&sets[EFDS], &nfds);
-	FD_SET(listen, &sets[RFDS].fds);
-	if (listen > nfds - 1)
-		nfds = listen + 1;
-	return (nfds);
-}
-
 #include <sys/stat.h>
 bool	ftp_open(const char *host, const int port, t_ftp *ftp)
 {
@@ -278,7 +21,7 @@ bool	ftp_open(const char *host, const int port, t_ftp *ftp)
 	home = getenv("HOME");
 	if (home == NULL)
 		home = "/tmp";
-	strncpy(ftp->home, home, PATH_SIZE_MAX);
+	ft_strncpy(ftp->home, home, PATH_SIZE_MAX);
 	LOG_DEBUG("fifo->users size %zu", list_size(&ftp->fifo.users));
 	LOG_DEBUG("fifo->datas size %zu", list_size(&ftp->fifo.datas));
 	return (true);
@@ -335,8 +78,8 @@ bool	new_connection(t_ftp *ftp)
 		return (false);
 	}
 	user->sock = sock;
-	strncpy(user->home, ftp->home, PATH_SIZE_MAX);
-	strncpy(user->pwd, ftp->home, PATH_SIZE_MAX);
+	ft_strncpy(user->home, ftp->home, PATH_SIZE_MAX);
+	ft_strncpy(user->pwd, ftp->home, PATH_SIZE_MAX);
 	data_success(&user->data);
 	user->nextfds = WFDS;
 	set_move(user, ftp->sets);
@@ -362,7 +105,7 @@ bool	request_user(t_ftp *ftp, t_user *user, int argc, char **argv)
 	}
 	else if (argc == 2)
 	{
-		strncpy(user->name, argv[1], USER_NAME_SIZE_MAX);
+		ft_strncpy(user->name, argv[1], USER_NAME_SIZE_MAX);
 	}
 	return (true);
 }
@@ -421,13 +164,13 @@ void	get_path(char *pwd, char *in_path, size_t size_max, char *path)
 {
 	if (in_path[0] == '/')
 	{
-		strncpy(path, in_path, size_max);
+		ft_strncpy(path, in_path, size_max);
 	}
 	else
 	{
-		strncpy(path, pwd, size_max);
-		strncat(path, "/", size_max);
-		strncat(path, in_path, size_max);
+		ft_strncpy(path, pwd, size_max);
+		ft_strncat(path, "/", size_max);
+		ft_strncat(path, in_path, size_max);
 	}
 }
 
@@ -446,7 +189,7 @@ bool	request_pasv(t_ftp *ftp, t_user *user, int argc, char **argv)
 	}
 
 	if (argv[1] == NULL)
-		strncpy(path, user->pwd, PATH_SIZE_MAX);
+		ft_strncpy(path, user->pwd, PATH_SIZE_MAX);
 	else
 		get_path(user->pwd, argv[1], PATH_SIZE_MAX, path);
 
@@ -488,7 +231,7 @@ bool	request_cwd(t_ftp *ftp, t_user *user, int argc, char **argv)
 	}
 
 	if (argc == 1)
-		strncpy(path, user->home, PATH_SIZE_MAX);
+		ft_strncpy(path, user->home, PATH_SIZE_MAX);
 	else
 		get_path(user->pwd, argv[1], PATH_SIZE_MAX, path);
 
@@ -788,7 +531,7 @@ bool	rfds(t_ftp *ftp, t_user *user)
 			user->data.size - user->data.offset : (size_t)size;
 
 		LOG_DEBUG("write {%.*s} at offset {%zu} size max {%zu}", (int)nb_write, data, user->data.offset, user->data.size);
-		memcpy(user->data.bytes + user->data.offset, data, nb_write);
+		ft_memcpy(user->data.bytes + user->data.offset, data, nb_write);
 		user->data.offset += nb_write;
 
 		if (user->data.offset == user->data.size)
@@ -965,7 +708,7 @@ int		main(int argc, char **argv)
 		return (1);
 	}
 	host = argv[1];
-	port = atoi(argv[2]);
+	port = ft_atoi(argv[2]);
 	LOG_DEBUG("host {%s} port {%d}", host, port);
 	if (!ftp_open(host, port, &ftp))
 	{

@@ -1,5 +1,7 @@
 #include "sock.h"
 
+#include "deps.h"
+
 #include <string.h>		/* memset() */
 #include <stdio.h>		/* perror() */
 
@@ -11,14 +13,14 @@ static bool		addrinfo_alloc_init (const char *host,
 	int				err;
 
 	*out_result = NULL;
-	memset(&hints, 0, sizeof (hints));
+	ft_memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;			/* Allow IPv4 or IPv6 */
 	hints.ai_socktype = SOCK_STREAM;		/* Stream socket */
 	hints.ai_flags = AI_PASSIVE;			/* For wildcard IP address */
 	hints.ai_protocol = 0;					/* Any protocol */
 	err = getaddrinfo(host, "ftp", &hints, &result);
 	if (err)
-		LOG_FATAL("getaddrinfo: %s", gai_strerror (err));
+		LOG_FATAL("getaddrinfo: %s", gai_strerror(err));
 	*out_result = result;
 	return (true);
 }
@@ -32,7 +34,7 @@ static bool	sock_bind(const int sock, const int port)
 	yes = 1;
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof (yes)) == -1)
 		return (false);
-	memset(&sockaddr, 0, sizeof (sockaddr));
+	ft_memset(&sockaddr, 0, sizeof (sockaddr));
 	sockaddr.sin_port = htons(port);
 	sockaddr.sin_family = AF_INET;
 	if (bind(sock, (struct sockaddr *)&sockaddr, sizeof (sockaddr)) == -1)
