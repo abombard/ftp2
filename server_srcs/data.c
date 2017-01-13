@@ -36,21 +36,14 @@ void	data_update(char *s, size_t size, t_data *data)
 
 static void	data_prefix(char *prefix, size_t prefix_size, t_data *data)
 {
-	size_t	size;
-
 	if (data->size + prefix_size > MSG_SIZE_MAX)
 	{
-		size = MSG_SIZE_MAX - prefix_size;
-		data->bytes[size - 1] = '$';
-		data->size = MSG_SIZE_MAX;
+		data->size = MSG_SIZE_MAX - prefix_size - 1;
+		data->bytes[MSG_SIZE_MAX - 1] = '$';
 	}
-	else
-	{
-		size = data->size;
-		data->size += prefix_size;
-	}
-	ft_memmove(data->bytes + prefix_size, data->bytes, size);
+	ft_memmove(data->bytes + prefix_size, data->bytes, data->size);
 	ft_memcpy(data->bytes, prefix, prefix_size);
+	data->size += prefix_size;
 	data->bytes[data->size] = '\0';
 }
 

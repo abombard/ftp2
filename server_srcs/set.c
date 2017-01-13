@@ -18,6 +18,8 @@ void	sets_teardown(t_set *sets)
 void	set_move(t_user *user, t_set *sets)
 {
 	user->fds = user->nextfds;
+	if (user->nextfds == RFDS)
+		data_teardown(&user->data);
 	list_move(&user->set, &sets[user->fds].users);
 	user->nextfds = NOFDS;
 }

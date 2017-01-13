@@ -2,10 +2,11 @@
 #include <unistd.h>
 #include <stdio.h>
 
-extern void	gnl_init(t_gnl *s, int fd)
+extern void	gnl_init(t_gnl *s, int fd, char *buf, size_t buf_size)
 {
 	s->fd = fd;
-	s->buf_size = sizeof(s->buf);
+	s->buf = buf;
+	s->buf_size = buf_size;
 	s->size = 0;
 	s->size_left = 0;
 }

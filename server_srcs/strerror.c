@@ -1,4 +1,4 @@
-#include "errno.h"
+#include "strerror.h"
 
 static char *err_str[] = {
 	[0] = "Success",
@@ -108,11 +108,12 @@ static char *err_str[] = {
 	[ENOTRECOVERABLE] = "State not recoverable",
 	[EOWNERDEAD] = "Previous owner died",
 	[EQFULL] = "Interface output queue is full",
+	[EARGS] = "Invalid number of arguments"
 };
 
 char	*strerror(int err_num)
 {
-	if (err_num < 0 || err_num > ELAST)
+	if (err_num < 0 || err_num > EARGS)
 		return ((void *)0);
 	return (err_str[err_num]);
 }
