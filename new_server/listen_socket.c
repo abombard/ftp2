@@ -51,6 +51,7 @@ int			listen_socket(const char *host, const int port)
 	int				sock;
 	struct addrinfo *rp;
 
+	sock = -1;
 	if (!addrinfo_alloc_init(host, &result))
 	{
 		LOG_ERROR("addrinfo_alloc_init failed");
@@ -59,19 +60,16 @@ int			listen_socket(const char *host, const int port)
 	rp = result;
 	while (rp != NULL)
 	{
-		sock = socket_open(rp->ai_family,
-							rp->ai_socktype,
-							rp->ai_protocol);
+		sock = open_socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 		if (sock != -1)
 		{
 			if (sock_bind(sock, port))
 				break ;
-			socket_close(sock);
+			close_socket(sock);
+			sock = -1;
 		}
 		rp = rp->ai_next;
 	}
-	if (rp == NULL)
-		sock = -1;
 	freeaddrinfo(result);
 	return (sock);
 }

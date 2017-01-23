@@ -1,5 +1,6 @@
 #include "strerror.h"
 
+#ifdef __LINUX__
 static char *err_str[] = {
 	[E2BIG] = "       E2BIG           Argument list too long ",
 	[EACCES] = "Permission denied ",
@@ -120,8 +121,9 @@ static char *err_str[] = {
 	[EXFULL] = "Exchange full",
 	[EARGS] = "Invalid number of arguments"
 };
+#endif
 
-#ifdef MAXOSX
+#ifdef __MACOSX__
 static char *err_str[] = {
 	[0] = "Success",
 	[EPERM] = "Operation not permitted",

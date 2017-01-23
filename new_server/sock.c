@@ -23,7 +23,7 @@ int		accept_connection(int listen_socket)
 	return (sock);
 }
 
-int	socket_open(const int ai_family,
+int	open_socket(const int ai_family,
 			const int ai_socktype,
 			const int ai_protocol)
 {
@@ -35,7 +35,7 @@ int	socket_open(const int ai_family,
 	return (sock);
 }
 
-void socket_close(int sock)
+void close_socket(int sock)
 {
 	if (sock < 0)
 		return ;

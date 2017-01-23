@@ -10,11 +10,11 @@
 #include <arpa/inet.h>		/* htons */
 #include <netdb.h>			/* gethostbyname */
 
-int		socket_open(const int ai_family,
+int		open_socket(const int ai_family,
 					const int ai_socktype,
 					const int ai_protocol);
 
-void 	socket_close(int sock);
+void 	close_socket(int sock);
 
 int		accept_connection(int listen_socket);
 

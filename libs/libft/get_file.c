@@ -6,11 +6,12 @@
 /*   By: abombard <marvin@42.fr>                    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2016/03/31 13:19:51 by abombard          #+#    #+#             */
-/*   Updated: 2016/03/31 13:20:05 by abombard         ###   ########.fr       */
+/*   Updated: 2017/01/23 14:29:49 by abombard         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "libft.h"
+#include <stdlib.h>
 #include <fcntl.h>
 
 char	*get_file(char *arg)

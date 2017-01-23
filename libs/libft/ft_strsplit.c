@@ -6,11 +6,12 @@
 /*   By: abombard <marvin@42.fr>                    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2016/03/31 13:21:34 by abombard          #+#    #+#             */
-/*   Updated: 2016/03/31 13:23:11 by abombard         ###   ########.fr       */
+/*   Updated: 2017/01/23 14:29:32 by abombard         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "libft.h"
+#include <stdlib.h>
 
 static int	nb_arg(char *s, char c)
 {

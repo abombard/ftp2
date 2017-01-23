@@ -6,7 +6,7 @@
 /*   By: abombard <marvin@42.fr>                    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2016/03/31 14:10:56 by abombard          #+#    #+#             */
-/*   Updated: 2016/03/31 14:43:22 by abombard         ###   ########.fr       */
+/*   Updated: 2017/01/23 14:21:04 by abombard         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,8 +14,6 @@
 # define LIBFT_H
 
 # include <unistd.h>
-# include <stdlib.h>
-# include <string.h>
 
 /*
 ** print
