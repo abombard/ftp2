@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "ft_printf.h"
+#include "printf.h"
 
 uint8_t	field_right(t_buffer *dst, int len, uint8_t c)
 {

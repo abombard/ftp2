@@ -1,6 +1,6 @@
 CC=clang
 FLAGS=
-FLAGS42=-Wall -Wextra -Werror -Wconversion
+FLAGS42=-Wall -Wextra -Werror
 
 NAME=server
 
@@ -14,7 +14,7 @@ LIBFT=$(LIBFT_DIR)/libft.a
 PRINTF=$(PRINTF_DIR)/libprintf.a
 LIST=$(LIST_DIR)/liblist.a
 
-LIBS=-L $(PRINTF_DIR) -lprintf -L $(LIBFT_DIR) -lft -L $(LIST_DIR) -llist
+LIBS=-L $(LIBFT_DIR) -lft -L $(LIST_DIR) -llist -L $(PRINTF_DIR) -lprintf
 
 SRC_DIR=./
 INCLUDES=-I ./includes -I $(LIBFT_DIR) -I $(LIST_DIR) -I $(PRINTF_DIR)
@@ -52,7 +52,7 @@ $(BUILD_DIR)/%.o:$(SRC_DIR)/%.c
 	@$(CC) $(FLAGS42) -c $< -o $@ $(INCLUDES)
 
 $(NAME):$(LIBFT) $(PRINTF) $(LIST) $(OBJ)
-	@$(CC) $^ -o $@ $(FLAGS)
+	@$(CC) $(FLAGS42) $(OBJ) $(LIBS) -o $@
 	@echo "$@ was created"
 
 clean:

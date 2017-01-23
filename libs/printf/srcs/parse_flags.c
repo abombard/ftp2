@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "ft_printf.h"
+#include "printf.h"
 #include "parse_flags.h"
 
 static uint32_t	get_value(char *fmt, uint32_t *value)

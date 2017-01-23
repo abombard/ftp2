@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "ft_printf.h"
+#include "printf.h"
 
 uint8_t			flag_apply_main(t_buffer *dst, t_flags *flag)
 {

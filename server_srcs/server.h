@@ -25,7 +25,8 @@
 typedef struct	s_ftp
 {
 	int		sock_listen;
-	t_fifo	fifo;
+	t_user	users[USER_COUNT_MAX];
+	
 	t_set	sets[4];
 	char	home[PATH_SIZE_MAX + 1];
 }				t_ftp;

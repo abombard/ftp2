@@ -232,7 +232,7 @@ static bool	send_file_open(const int sock, char *file)
 	}
 	if (sb.st_size < 0)
 	{
-		LOG_ERROR("file size %lld", sb.st_size);
+		LOG_ERROR("file size %ld", sb.st_size);
 		return (false);
 	}
 	status = send_file_map(sock, file, fd, (size_t)sb.st_size);

@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "ft_printf.h"
+#include "printf.h"
 
 static uint8_t	field_left(t_buffer *dst, int len, uint8_t c)
 {

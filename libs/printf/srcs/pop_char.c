@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "ft_printf.h"
+#include "printf.h"
 #include <wchar.h>
 
 static void		case_s_wchar(t_buffer *dst, va_list ap)

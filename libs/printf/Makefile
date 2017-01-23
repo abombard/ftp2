@@ -26,7 +26,7 @@ SRC=ft_fprintf.c\
 
 OBJ=$(addprefix $(BUILD_DIR)/,$(SRC:.c=.o))
 
-all:$(PRINTF)
+all:$(BUILD_DIR) $(PRINTF)
 
 $(BUILD_DIR):
 	@mkdir -p $@
@@ -34,7 +34,7 @@ $(BUILD_DIR):
 $(BUILD_DIR)/%.o:$(SRC_DIR)/%.c
 	@$(CC) $(FLAGS) -c $< -o $@ $(INCLUDES)
 
-$(PRINTF):$(BUILD_DIR) $(OBJ)
+$(PRINTF):$(OBJ)
 	@ar rc $@ $(OBJ)
 	@ranlib $@
 	@echo "$@ was created"

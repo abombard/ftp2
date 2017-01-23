@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "ft_printf.h"
+#include "printf.h"
 
 static uint8_t	ft_itoa_ull(t_buffer *dst, unsigned long long n)
 {

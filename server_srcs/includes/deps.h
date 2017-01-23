@@ -4,6 +4,6 @@
 # include "sys_types.h"
 # include "libft.h"
 # include "list.h"
-# include "ft_printf.h"
+# include "printf.h"
 
 #endif

@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "ft_printf.h"
+#include "printf.h"
 #define NB_SIZE_MAX 32
 
 static uint8_t		ft_itoa_lg(t_buffer *dst, long long in_nb)

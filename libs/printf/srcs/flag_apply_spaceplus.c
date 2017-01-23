@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "ft_printf.h"
+#include "printf.h"
 
 static uint8_t	pad_one_character(t_buffer *dst, t_flags *flag, char c)
 {

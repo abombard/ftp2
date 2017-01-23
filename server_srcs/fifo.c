@@ -24,7 +24,7 @@ void	fifo_store(void *elem, t_list *fifo)
 	t_list	*pos;
 
 	pos = (t_list *)elem;
-	list_push_front(pos, fifo);
+	list_add(pos, fifo);
 }
 
 bool	fifo_create(size_t size, size_t count, t_list *fifo)

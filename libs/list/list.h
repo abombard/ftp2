@@ -59,12 +59,12 @@ void		t_list_splice(t_list *list, t_list *head);
 /*
 ** Add the node new at the begining of the list pointed by head.
 */
-void		list_push_front(t_list *new, t_list *head);
+void		list_add(t_list *new, t_list *head);
 
 /*
 ** Add the node new at the end of the list pointed by head.
 */
-void		list_push_back(t_list *new, t_list *head);
+void		list_add_tail(t_list *new, t_list *head);
 
 /*
 ** Delete the list pointed by entry.

@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "ft_printf.h"
+#include "printf.h"
 
 static uint8_t	get_hex(t_buffer *dst, unsigned long long nbr)
 {

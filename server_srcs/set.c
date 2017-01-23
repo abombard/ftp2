@@ -3,7 +3,7 @@
 
 void	set_teardown(t_set *set)
 {
-	INIT_LIST_HEAD(&set->users);
+	INIT_LIST_HEAD(&set->datas);
 	FD_ZERO(&set->fds);
 }
 
@@ -15,28 +15,19 @@ void	sets_teardown(t_set *sets)
 	set_teardown(&sets[EFDS]);
 }
 
-void	set_move(t_user *user, t_set *sets)
-{
-	user->fds = user->nextfds;
-	if (user->nextfds == RFDS)
-		data_teardown(&user->data);
-	list_move(&user->set, &sets[user->fds].users);
-	user->nextfds = NOFDS;
-}
-
 void	set_prepare(t_set *set, int *nfds)
 {
-	t_user	*user;
+	t_data	*data;
 	t_list	*pos;
 
 	FD_ZERO(&set->fds);
-	pos = &set->users;
-	while ((pos = pos->next) != &set->users)
+	pos = &set->datas;
+	while ((pos = pos->next) != &set->datas)
 	{
-		user = CONTAINER_OF(pos, t_user, set);
-		FD_SET(user->sock, &set->fds);
-		if (user->sock > *nfds - 1)
-			*nfds = user->sock + 1;
+		data = CONTAINER_OF(pos, t_data, set);
+		FD_SET(data->sock, &set->fds);
+		if (data->sock > *nfds - 1)
+			*nfds = data->sock + 1;
 	}
 }
 

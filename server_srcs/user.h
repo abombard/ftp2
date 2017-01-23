@@ -9,28 +9,18 @@
 # define USER_NAME_SIZE_MAX		63
 # define PATH_SIZE_MAX			255
 
-typedef enum	e_fds
-{
-	NOFDS = 0,
-	RFDS,
-	WFDS,
-	EFDS
-}				t_fds;
-
 typedef struct	s_user
 {
-	bool		used;
+	t_list		fifo;
+	bool		online;
 	int			sock;
 	char		name[USER_NAME_SIZE_MAX + 1];
 	char		home[PATH_SIZE_MAX + 1];
 	char		pwd[PATH_SIZE_MAX + 1];
-	t_fds		fds;
-	t_fds		nextfds;
-	t_data		data;
-	t_list		set;
+	t_buf		msg_in;
+	t_buf		msg_out;
 }				t_user;
 
-char	*fds_tostring(t_fds fds);
 t_user	*user_new(t_fifo *fifo);
 void	user_del(t_fifo *fifo, t_user *user);
 void	user_show(t_user *user);

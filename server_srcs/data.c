@@ -15,16 +15,16 @@ void	data_teardown(t_data *data)
 
 void	data_update(char *s, size_t size, t_data *data)
 {
-	if (data->size == MSG_SIZE_MAX)
+	if (data->size == data->size_max)
 	{
-		data->bytes[MSG_SIZE_MAX - 1] = '$';
+		data->bytes[data->size_max - 1] = '$';
 		return ;
 	}
-	if (data->size + size > MSG_SIZE_MAX)
+	if (data->size + size > data->size_max)
 	{
-		ft_memcpy(data->bytes + data->size, s, MSG_SIZE_MAX - data->size - 1);
-		data->bytes[MSG_SIZE_MAX - 1] = '$';
-		data->size = MSG_SIZE_MAX - 1;
+		ft_memcpy(data->bytes + data->size, s, data->size_max - data->size - 1);
+		data->bytes[data->size_max - 1] = '$';
+		data->size = data->size_max - 1;
 	}
 	else
 	{
@@ -36,10 +36,10 @@ void	data_update(char *s, size_t size, t_data *data)
 
 static void	data_prefix(char *prefix, size_t prefix_size, t_data *data)
 {
-	if (data->size + prefix_size > MSG_SIZE_MAX)
+	if (data->size + prefix_size > data->size_max)
 	{
-		data->size = MSG_SIZE_MAX - prefix_size - 1;
-		data->bytes[MSG_SIZE_MAX - 1] = '$';
+		data->size = data->size_max - prefix_size - 1;
+		data->bytes[data->size_max - 1] = '$';
 	}
 	ft_memmove(data->bytes + prefix_size, data->bytes, data->size);
 	ft_memcpy(data->bytes, prefix, prefix_size);

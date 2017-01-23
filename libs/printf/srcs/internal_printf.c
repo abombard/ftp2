@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "ft_printf.h"
+#include "printf.h"
 
 static uint8_t	switch_case(t_buffer *dst, char c, va_list ap, t_flags *flag)
 {

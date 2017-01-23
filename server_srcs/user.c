@@ -31,19 +31,16 @@ t_user	*user_new(t_fifo *fifo)
 	user->name[0] = '\0';
 	user->home[0] = '\0';
 	user->pwd[0] = '\0';
-	user->fds = NOFDS;
-	user->nextfds = NOFDS;
-	user->data.bytes = fifo_pull(&fifo->datas);
 	data_teardown(&user->data);
-	INIT_LIST_HEAD(&user->set);
+	user->data.bytes = fifo_pull(&fifo->datas);
+	user->data.size_max = MSG_SIZE_MAX;
+	user->data.user = user;
 	return (user);
 }
 
 void	user_del(t_fifo *fifo, t_user *user)
 {
-	list_del(&user->set);
 	socket_close(user->sock);
-	fifo_store(user->data.bytes, &fifo->datas);
 	fifo_store(user, &fifo->users);
 }
 

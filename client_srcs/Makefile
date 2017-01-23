@@ -1,6 +1,6 @@
 CC=clang
 FLAGS=
-FLAGS42=-Wall -Wextra -Werror -Wconversion
+FLAGS42=-Wall -Wextra -Werror
 
 NAME=client
 
@@ -46,7 +46,7 @@ $(BUILD_DIR)/%.o:$(SRC_DIR)/%.c
 	@$(CC) $(FLAGS42) -c $< -o $@ $(INCLUDES)
 
 $(NAME):$(LIBFT) $(PRINTF) $(LIST) $(OBJ)
-	@$(CC) $^ -o $@ $(FLAGS)
+	@$(CC) $(FLAGS42) $(OBJ) $(LIBS) -o $@
 	@echo "$@ was created"
 
 clean:
