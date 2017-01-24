@@ -41,10 +41,23 @@ typedef struct	s_io
 }				t_io;
 
 /*
+** user
+*/
+# define NAME_SIZE_MAX	63
+# define PATH_SIZE_MAX	255
+typedef struct	s_user
+{
+	char	name[NAME_SIZE_MAX + 1];
+	char	home[PATH_SIZE_MAX + 1];
+	char	pwd[PATH_SIZE_MAX + 1];
+}				t_user;
+
+/*
 ** server
 */
 # define CONNECTION_COUNT_MAX		63
 # define DATA_COUNT_MAX				(CONNECTION_COUNT_MAX * 2)
+# define MSG_SIZE_MAX				255
 
 # define WFDS		0
 # define RFDS		1
@@ -63,6 +76,8 @@ typedef struct	s_server
 
 	t_list	io_list;
 	t_io	io_array[CONNECTION_COUNT_MAX];
+
+	t_user	user_array[CONNECTION_COUNT_MAX];
 
 	fd_set	fds[SET_COUNT];
 }				t_server;
