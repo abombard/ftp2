@@ -121,7 +121,8 @@ static char *err_str[] = {
 	[EXDEV] = "Improper link ",
 	[EXFULL] = "Exchange full",
 	[EARGS] = "Invalid number of arguments",
-	[ENOTREGISTER] = "Not registered"
+	[ENOTREGISTER] = "Not registered",
+	[EINVALREQUEST] = "Invalid request"
 };
 #endif
 
@@ -235,7 +236,8 @@ static char *err_str[] = {
 	[EOWNERDEAD] = "Previous owner died",
 	[EQFULL] = "Interface output queue is full",
 	[EARGS] = "Invalid number of arguments",
-	[ENOTREGISTER] = "Not registered"
+	[ENOTREGISTER] = "Not registered",
+	[EINVALREQUEST] = "Invalid request"
 };
 #endif
 

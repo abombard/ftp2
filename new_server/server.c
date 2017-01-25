@@ -188,7 +188,15 @@ int			data_recv_file(char *file, size_t size, t_data *data)
 		close(fd);
 		return (ESUCCESS);
 	}
-	map = mmap(0, size, PROT_WRITE, MAP_PRIVATE, fd, 0);
+
+	if (ftruncate(fd, size))
+	{
+		err = errno;
+		close(fd);
+		return (err);
+	}
+
+	map = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (map == MAP_FAILED)
 	{
 		err = errno;
@@ -198,7 +206,7 @@ int			data_recv_file(char *file, size_t size, t_data *data)
 	data->fd = fd;
 	data->bytes = map;
 	data->offset = 0;
-	data->size = size;
+	data->size = 0;
 	data->size_max = size;
 	return (ESUCCESS);
 }
@@ -300,6 +308,7 @@ t_io		*get_io(int sock, t_server *server)
 
 void		io_input_teardown(t_io *io)
 {
+	io->data_in.fd = -1;
 	io->data_in.bytes = io->data_in_buf;
 	io->data_in.size_max = MSG_SIZE_MAX;
 	io->data_in.size = 0;
@@ -336,6 +345,8 @@ void		delete_io(t_io *io)
 	t_list		*pos;
 
 	list_del(&io->list);
+	if (io->data_in.fd != -1)
+		data_free(&io->data_in);
 	free(io->data_in_buf);
 	while (!list_is_empty(&io->datas_out))
 	{
@@ -514,9 +525,10 @@ bool	int_recv_data(int sock, t_data *data)
 		perror("recv", errno);
 		return (false);
 	}
-	if (data->nbytes == 0 && data->size != data->size_max)
+	if (data->nbytes == 0)
 	{
 		//TEMP EOF
+		LOG_DEBUG("reached EOF");
 		return (false);
 	}
 	LOG_DEBUG("recv {%.*s}", (int)data->nbytes, data->bytes + data->size);
@@ -823,44 +835,6 @@ int		request_put(int argc, char **argv, t_user *user, t_io *io)
 	return (ESUCCESS);
 }
 
-/*
-** get request
-*/
-bool	get_request(t_data *in, t_buf *request)
-{
-	char	*pt;
-
-	pt = ft_memchr(in->bytes, '\n', in->size);
-	if (pt == NULL)
-		return (false);
-	request->bytes = in->bytes;
-	request->size = (size_t)(pt - in->bytes);
-	return (true);
-}
-
-bool	split_request(t_buf *request, int *argc, char ***argv)
-{
-	size_t	i;
-
-	request->bytes[request->size] = '\0';
-	*argv = strsplit_whitespace(request->bytes);
-	request->bytes[request->size] = '\n';
-	if (!*argv)
-		return (false);
-	*argc = 0;
-	while ((*argv)[*argc])
-		(*argc) += 1;
-	if (*argc <= 0)
-		return (false);
-	i = 0;
-	while ((*argv)[0][i])
-	{
-		(*argv)[0][i] = (char)ft_toupper((*argv)[0][i]);
-		i++;
-	}
-	return (true);
-}
-
 typedef struct	s_request
 {
 	char	*str;
@@ -888,7 +862,7 @@ int		match_request(int argc, char **argv, t_user *user, t_io *io)
 			return (requests[i].func(argc, argv, user, io));
 		i++;
 	}
-	return (ENOTSUP);
+	return (EINVALREQUEST);
 }
 
 bool	treat_request(int ac, char **av, t_user *user, t_io *io)
@@ -911,6 +885,42 @@ bool	treat_request(int ac, char **av, t_user *user, t_io *io)
 	return (true);
 }
 
+/*
+** get request
+*/
+bool	get_request(t_data *in, t_buf *request)
+{
+	char	*pt;
+
+	pt = ft_memchr(in->bytes, '\n', in->size);
+	if (pt == NULL)
+		return (false);
+	request->bytes = in->bytes;
+	request->size = (size_t)(pt - in->bytes);
+	return (true);
+}
+
+bool	split_request(t_buf *request, int *argc, char ***argv)
+{
+	size_t	i;
+
+	request->bytes[request->size] = '\0';
+	*argv = strsplit_whitespace(request->bytes);
+	request->bytes[request->size] = '\n';
+	if (!*argv)
+		return (false);
+	*argc = 0;
+	while ((*argv)[*argc])
+		(*argc) += 1;
+	i = 0;
+	while ((*argv)[0][i])
+	{
+		(*argv)[0][i] = (char)ft_toupper((*argv)[0][i]);
+		i++;
+	}
+	return (true);
+}
+
 bool	treat_input_data(t_io *io)
 {
 	int			argc;
@@ -919,16 +929,19 @@ bool	treat_input_data(t_io *io)
 	t_buf		request;
 	bool		status;
 
+	if (io->data_in.fd != -1)
+		return (true);
 	LOG_DEBUG("data_in {%.*s}", (int)io->data_in.size, io->data_in.bytes);
 	if (!get_request(&io->data_in, &request))
 		return (true);
 	LOG_DEBUG("request {%.*s}", (int)request.size, request.bytes);
-	if (!split_request(&request, &argc, &argv))
-		return (false);
+	split_request(&request, &argc, &argv);
 	request.size += 1;
 	ft_memmove(io->data_in.bytes, io->data_in.bytes + request.size, io->data_in.size - request.size);
 	io->data_in.size -= request.size;
 	LOG_DEBUG("data_in {%.*s}", (int)io->data_in.size, io->data_in.bytes);
+	if (!argv)
+		return (false);
 	user = get_user(io->sock);
 	status = treat_request(argc, argv, user, io);
 	argc = 0;
