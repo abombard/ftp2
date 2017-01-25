@@ -82,6 +82,8 @@ typedef struct	s_server
 	t_user	user_array[CONNECTION_COUNT_MAX];
 
 	fd_set	fds[SET_COUNT];
+
+	char	home[PATH_SIZE_MAX + 1];
 }				t_server;
 
 #endif

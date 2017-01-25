@@ -596,10 +596,7 @@ bool	request_ls(int argc, char **argv, t_user *user, t_msg *out)
 	off_t			size;
 
 	if (argc > 2)
-	{
-		msg_add(out, strerror(E2BIG));
-		return (false);
-	}
+		return (E2BIG);
 
 	size = getpagesize();
 	offset = 0;

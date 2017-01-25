@@ -12,6 +12,22 @@ void	perror(char *s, int err)
 	ft_fprintf(2, "%s: %s\n", s, strerror(err));
 }
 
+size_t	concat_safe(char *buf, size_t offset, size_t size_max, char *s)
+{
+	size_t	size;
+
+	if (s == NULL)
+		LOG_ERROR("s %p", s);
+	size = ft_strlen(s);
+	if (offset + size > size_max)
+	{
+		size = size_max - offset - 1;
+		buf[size_max - 1] = '$';
+	}
+	ft_memcpy(buf + offset, s, size);
+	return (offset + size);
+}
+
 /*
 ** server
 */
@@ -115,6 +131,8 @@ t_data		*msg_success(char *msg)
 	ft_strncat(data->bytes, " ", data->size_max);
 	ft_strncat(data->bytes, msg, data->size_max);
 	data->size = ft_strlen(data->bytes);
+	data->bytes[data->size] = '\n';
+	data->size += 1;
 	LOG_DEBUG("msg {%.*s}", (int)data->size, data->bytes);
 	return (data);
 }
@@ -132,6 +150,9 @@ t_data		*msg_error(char *msg)
 	ft_strncat(data->bytes, " ", data->size_max);
 	ft_strncat(data->bytes, msg, data->size_max);
 	data->size = ft_strlen(data->bytes);
+	data->bytes[data->size] = '\n';
+	data->size += 1;
+	LOG_DEBUG("msg {%.*s}", (int)data->size, data->bytes);
 	return (data);
 }
 
@@ -141,27 +162,28 @@ void		push_data(t_data *data, t_list *data_list)
 }
 
 /* //TEMP */
+/*
+** data file
+*/
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
-bool		data_create_file(t_data *data, char *file, size_t size)
+int			data_recv_file(t_data *data, char *file, size_t size)
 {
 	int		fd;
 	char	*map;
+	int		err;
 
 	// What if size == 0 ?
-	fd = open(file, O_CREAT | O_WRONLY, 0644);
+	fd = open(file, O_CREAT | O_EXCL | O_WRONLY, 0644);
 	if (fd == -1)
-	{
-		perror("open", errno);
-		return (false);
-	}
+		return (errno);
 	map = mmap(0, size, PROT_WRITE, MAP_PRIVATE, fd, 0);
 	if (map == MAP_FAILED)
 	{
-		perror("mmap", errno);
+		err = errno;
 		close(fd);
-		return (false);
+		return (err);
 	}
 	data->fd = fd;
 	data->bytes = map;
@@ -171,48 +193,67 @@ bool		data_create_file(t_data *data, char *file, size_t size)
 	return (true);
 }
 
-bool		data_read_file(t_data *data, char *file)
+int		get_file_size(int fd, size_t *size)
 {
-	int			fd;
 	struct stat	sb;
-	char		*map;
+
+	if (fstat(fd, &sb))
+		return (errno);
+	if (!S_ISREG(sb.st_mode))
+		return (EFTYPE);
+	*size = (size_t)sb.st_size;
+	return (ESUCCESS);
+}
+
+int		data_send_file(char *file, t_data *data)
+{
+	int		fd;
+	char	*map;
+	size_t	size;
+	int		err;
 
 	fd = open(file, O_RDONLY);
 	if (fd == -1)
+		return (errno);
+	err = get_file_size(fd, &size);
+	if (err)
+		return (err);
+	if (size == 0)
 	{
-		perror("open", errno);
-		return (false);
-	}
-	if (fstat(fd, &sb))
-	{
-		perror("fstat", errno);
+		// What if file is empty ?
 		close(fd);
-		return (false);
+		return (ESUCCESS);
 	}
-	// What if sb.st_size == 0 ?
-	map = mmap(0, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+
+	map = mmap(0, size, PROT_READ, MAP_PRIVATE, fd, 0);
 	if (map == MAP_FAILED)
 	{
-		perror("mmap", errno);
+		err = errno;
 		close(fd);
-		return (false);
+		return (err);
 	}
+
 	data->fd = fd;
 	data->bytes = map;
-	data->size = 0;
-	data->size_max = sb.st_size;
-	return (true);
+	data->offset = 0;
+	data->size = size;
+	data->size_max = size;
+
+	return (ESUCCESS);
 }
 /* //TEMP */
 
 void		data_free_file(t_data *data)
 {
-	munmap(data->bytes, data->size_max);
-	close(data->fd);
+	if (munmap(data->bytes, data->size_max))
+		perror("munmap", errno);
+	if (close(data->fd))
+		perror("close", errno);
 }
 
 void		data_free(t_data *data)
 {
+	LOG_DEBUG("free {%.*s} fd %d size %zu size_max %zu", (int)data->size, data->bytes, data->fd, data->size, data->size_max);
 	if (data->fd == -1)
 		data_free_msg(data);
 	else
@@ -220,18 +261,16 @@ void		data_free(t_data *data)
 }
 
 /*
-** data file
-*/
-//TEMP
-
-/*
 ** user
 */
 void		user_clear(t_user *user)
 {
+	t_server	*server;
+
+	server = get_server();
 	user->name[0] = '\0';
-	user->home[0] = '\0';
-	user->pwd[0] = '\0';
+	ft_strncpy(user->home, server->home, PATH_SIZE_MAX);
+	ft_strncpy(user->pwd, server->home, PATH_SIZE_MAX);
 }
 
 /*
@@ -369,6 +408,11 @@ bool	server_open(char *host, int port)
 		INIT_LIST_HEAD(&io->datas_out);
 		i++;
 	}
+
+	char	*home = getenv("HOME");
+	if (!home)
+		home = "/tmp";
+	ft_strncpy(server->home, home, PATH_SIZE_MAX);
 	return (true);
 }
 
@@ -524,6 +568,20 @@ bool	send_data(t_io *io)
 /*
 ** treat request
 */
+int	request_pwd(int argc, char **argv, t_user *user, t_io *io)
+{
+	t_data	*data;
+
+	(void)argv;
+	if (argc > 1)
+		return (E2BIG);
+	data = msg_success(user->pwd);
+	if (!data)
+		return (ENOMEM);
+	push_data(data, &io->datas_out);
+	return (ESUCCESS);
+}
+
 int		request_user(int argc, char **argv, t_user *user, t_io *io)
 {
 	t_data	*data;
@@ -585,6 +643,135 @@ int		request_syst(int argc, char **argv, t_user *user, t_io *io)
 	return (ESUCCESS);
 }
 
+void	get_path(char *pwd, char *in_path, size_t size_max, char *path)
+{
+	if (in_path[0] == '/')
+	{
+		ft_strncpy(path, in_path, size_max);
+	}
+	else
+	{
+		ft_strncpy(path, pwd, size_max);
+		ft_strncat(path, "/", size_max);
+		ft_strncat(path, in_path, size_max);
+	}
+}
+
+#include <dirent.h>
+int		request_ls(int argc, char **argv, t_user *user, t_io *io)
+{
+	DIR				*dp;
+	struct dirent	*ep;
+	char			path[PATH_SIZE_MAX + 1];
+
+	char			buf[4096];
+	off_t			offset;
+
+	if (argc > 2)
+		return (E2BIG);
+
+	if (argv[1] == NULL)
+		ft_strncpy(path, user->pwd, PATH_SIZE_MAX);
+	else
+		get_path(user->pwd, argv[1], PATH_SIZE_MAX, path);
+
+	offset = 0;
+
+	LOG_DEBUG("path {%s}", path);
+
+	if ((dp = opendir(path)) == NULL)
+		return (errno);
+
+	while ((ep = readdir(dp)) != NULL)
+	{
+		if (ep->d_name[0] == '.')
+			continue ;
+		offset = concat_safe(buf, offset, sizeof(buf), ep->d_name);
+		offset = concat_safe(buf, offset, sizeof(buf), " ");
+	}
+	if (offset > 0)
+		offset -= 1;
+
+	buf[offset] = '\0';
+
+	closedir(dp);
+
+	t_data		*data;
+
+	data = msg_success(buf);
+	if (!data)
+		return (ENOMEM);
+	push_data(data, &io->datas_out);
+
+	return (ESUCCESS);
+}
+
+int		request_cd(int argc, char **argv, t_user *user, t_io *io)
+{
+	char	*pwd_argv[2];
+	char	path[PATH_SIZE_MAX + 1];
+
+	if (argc > 2)
+		return (E2BIG);
+
+	if (argc == 1)
+		ft_strncpy(path, user->home, PATH_SIZE_MAX);
+	else
+		get_path(user->pwd, argv[1], PATH_SIZE_MAX, path);
+
+	if (chdir(path))
+		return (errno);
+
+	if (!getcwd(user->pwd, PATH_SIZE_MAX))
+		return (errno);
+
+	pwd_argv[0] = "PWD";
+	pwd_argv[1] = NULL;
+	return (request_pwd(1, pwd_argv, user, io));
+}
+
+int		request_get(int argc, char **argv, t_user *user, t_io *io)
+{
+	t_data		*file;
+	t_data		*file_size;
+	char		*file_size_str;
+	char		path[PATH_SIZE_MAX + 1];
+	int			err;
+
+	if (argc != 2)
+		return (EARGS);
+	file = data_pull();
+	if (!file)
+		return (ENOMEM);
+	get_path(user->pwd, argv[1], PATH_SIZE_MAX, path);
+	err = data_send_file(path, file);
+	if (err)
+	{
+		data_store(file);
+		return (err);
+	}
+	file_size_str = ft_itoa(file->size_max);
+	if (!file_size_str)
+	{
+		err = errno;
+		data_free(file);
+		data_store(file);
+		return (err);
+	}
+	file_size = msg_success(file_size_str);
+	if (!file_size)
+	{
+		free(file_size_str);
+		data_free(file);
+		data_store(file);
+		return (ENOMEM);
+	}
+	free(file_size_str);
+	push_data(file_size, &io->datas_out);
+	push_data(file, &io->datas_out);
+	return (ESUCCESS);
+}
+
 /*
 ** get request
 */
@@ -632,13 +819,13 @@ typedef struct	s_request
 int		match_request(int argc, char **argv, t_user *user, t_io *io)
 {
 	static t_request	requests[] = {
-		//{ "PWD",  request_pwd },
+		{ "PWD",  request_pwd },
 		{ "USER", request_user },
 		{ "QUIT", request_quit },
 		{ "SYST", request_syst },
-		//{ "LS",   request_ls },
-		//{ "CD",   request_cd },
-		//{ "GET",  request_get },
+		{ "LS",   request_ls },
+		{ "CD",   request_cd },
+		{ "GET",  request_get },
 		//{ "PUT",  request_put }
 	};
 	size_t				i;
@@ -753,7 +940,7 @@ bool	server_loop(void)
 ** main
 */
 #include <unistd.h>
-static volatile bool	run = true;
+static bool	run = true;
 
 void	sighandler(int sig)
 {
@@ -766,7 +953,11 @@ int		main(int argc, char **argv)
 	char		*host;
 	int			port;
 
-	signal(SIGINT, sighandler);
+	if (signal(SIGINT, sighandler) == SIG_ERR)
+	{
+		perror("signal", errno);
+		return (EXIT_FAILURE);
+	}
 	if (argc != 3)
 	{
 		ft_fprintf(2, "Usage: %s host port\n", argv[0]);
