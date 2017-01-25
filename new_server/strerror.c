@@ -2,7 +2,8 @@
 
 #ifdef __LINUX__
 static char *err_str[] = {
-	[E2BIG] = "       E2BIG           Argument list too long ",
+	[ESUCCESS] = "SUCCESS",
+	[E2BIG] = "Argument list too long ",
 	[EACCES] = "Permission denied ",
 	[EADDRINUSE] = "Address already in use ",
 	[EADDRNOTAVAIL] = "Address not available ",
@@ -119,13 +120,14 @@ static char *err_str[] = {
 	[EUSERS] = "Too many users",
 	[EXDEV] = "Improper link ",
 	[EXFULL] = "Exchange full",
-	[EARGS] = "Invalid number of arguments"
+	[EARGS] = "Invalid number of arguments",
+	[ENOTREGISTER] = "Not registered"
 };
 #endif
 
 #ifdef __MACOSX__
 static char *err_str[] = {
-	[0] = "Success",
+	[ESUCCESS] = "Success",
 	[EPERM] = "Operation not permitted",
 	[ENOENT] = "No such file or directory",
 	[ESRCH] = "No such process",
@@ -232,7 +234,8 @@ static char *err_str[] = {
 	[ENOTRECOVERABLE] = "State not recoverable",
 	[EOWNERDEAD] = "Previous owner died",
 	[EQFULL] = "Interface output queue is full",
-	[EARGS] = "Invalid number of arguments"
+	[EARGS] = "Invalid number of arguments",
+	[ENOTREGISTER] = "Not registered"
 };
 #endif
 

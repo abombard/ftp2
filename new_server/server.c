@@ -85,14 +85,9 @@ void		data_store(t_data *data)
 ** data msg
 */
 #include <stdlib.h>
-void		data_free_msg(t_data *data)
+t_data		*data_pull_msg(size_t size)
 {
-	free(data->bytes);
-}
-
-t_data		*data_create_msg(char *msg)
-{
-	t_data		*data;
+	t_data	*data;
 
 	data = data_pull();
 	if (!data)
@@ -100,44 +95,56 @@ t_data		*data_create_msg(char *msg)
 		LOG_ERROR("data_pull failed");
 		return (NULL);
 	}
-	data_clear(data);
-	data->bytes = ft_strdup(msg);
+	data->bytes = (char *)malloc(size + 1);
 	if (!data->bytes)
 	{
 		perror("malloc", errno);
-		data_store(data);
 		return (NULL);
 	}
-	data->size = ft_strlen(msg);
-	data->size_max = data->size;
+	data->size_max = size;
 	return (data);
 }
 
-t_data		*data_msg(bool status, char *msg)
+void		data_free_msg(t_data *data)
 {
-	t_data	*data;
-	char	buf[MSG_SIZE_MAX + 1];
-
-	buf[0] = '\0';
-	ft_strncat(buf, status ? SUCCESS : ERROR, MSG_SIZE_MAX);
-	ft_strncat(buf, " ", MSG_SIZE_MAX);
-	ft_strncat(buf, msg, MSG_SIZE_MAX);
-	data = data_create_msg(buf);
-	return (data);
+	free(data->bytes);
 }
 
-bool		send_msg(t_io *io, bool status, char *msg)
+t_data		*msg_success(char *msg)
 {
 	t_data	*data;
+	size_t	msg_size;
 
-	data = data_msg(status, msg);
+	msg_size = SUCCESS_SIZE + sizeof(" ") - 1 + ft_strlen(msg);
+	data = data_pull_msg(msg_size);
 	if (!data)
-	{
-		LOG_ERROR("data_msg failed status: %s msg {%s}", status ? SUCCESS : ERROR, msg);
-		return (false);
-	}
-	list_add_tail(&data->list, &io->datas_out);
-	return (true);
+		return (NULL);
+	ft_strncpy(data->bytes, SUCCESS, data->size_max);
+	ft_strncat(data->bytes, " ", data->size_max);
+	ft_strncat(data->bytes, msg, data->size_max);
+	data->size = ft_strlen(data->bytes);
+	return (data);
+}
+
+t_data		*msg_error(char *msg)
+{
+	t_data	*data;
+	size_t	msg_size;
+
+	msg_size = ERROR_SIZE + sizeof(" ") - 1 + ft_strlen(msg);
+	data = data_pull_msg(msg_size);
+	if (!data)
+		return (NULL);
+	ft_strncpy(data->bytes, ERROR, data->size_max);
+	ft_strncat(data->bytes, " ", data->size_max);
+	ft_strncat(data->bytes, msg, data->size_max);
+	data->size = ft_strlen(data->bytes);
+	return (data);
+}
+
+void		push_data(t_list *data_list, t_data *data)
+{
+	list_add_tail(&data->list, data_list);
 }
 
 /* //TEMP */
@@ -261,20 +268,11 @@ bool		create_io(int sock)
 	return (true);
 }
 
-void		delete_io(int sock)
+void		delete_io(t_io *io)
 {
-	t_server	*server;
-	t_io		*io;
 	t_data		*data;
 	t_list		*pos;
 
-	server = get_server();
-	io = get_io(sock, server);
-	if (!io)
-	{
-		LOG_ERROR("get_io failed sock %d", sock);
-		return ;
-	}
 	data_free(&io->data_in);
 	while (!list_is_empty(&io->datas_out))
 	{
@@ -474,69 +472,72 @@ bool	send_data(t_io *io)
 /*
 ** treat request
 */
-bool	request_user(int argc, char **argv, t_user *user, t_io *io)
+int		request_user(int argc, char **argv, t_user *user, t_io *io)
 {
+	t_data	*data;
+
+	data = NULL;
 	if (argc > 2)
-	{
-		send_msg(io, false, strerror(E2BIG));
-		return (false);
-	}
+		return (E2BIG);
 	if (argc == 1)
 	{
-		if (strlen(user->name) == 0)
-		{
-			msg_add(out, "User did not registered");
-			return (false);
-		}
-		msg_add(out, user->name);
+		if (ft_strlen(user->name) == 0)
+			return (ENOTREGISTER);
+		data = msg_success(user->name);
+		if (!data)
+			return (ENOMEM);
+		push_data(data, &io->datas_out);
 	}
 	else if (argc == 2)
 	{
 		ft_strncpy(user->name, argv[1], NAME_SIZE_MAX);
+		data = msg_success(user->name);
+		if (!data)
+			return (ENOMEM);
+		push_data(data, &io->datas_out);
 	}
-	return (true);
+	return (ESUCCESS);
 }
 
-bool	request_quit(int argc, char **argv, t_user *user, t_io *io)
+int		request_quit(int argc, char **argv, t_user *user, t_io *io)
 {
-	(void)argv;
-	if (argc > 1)
-	{
-		msg_add(out, strerror(EARGS));
-		return (false);
-	}
-	send(user->msg_w.sock, MSG(SUCCESS "\n"), MSG_DONTWAIT);
-	del_user(user);
-	return (true);
-}
-
-#include <sys/utsname.h>	/* uname() */
-bool	request_syst(int argc, char **argv, t_user *user, t_io *io)
-{
-	struct utsname	buf;
-
 	(void)argv;
 	(void)user;
 	if (argc > 1)
-	{
-		msg_add(out, strerror(E2BIG));
-		return (false);
-	}
-	if (uname(&buf))
-	{
-		msg_add(out, strerror(errno));
-		return (false);
-	}
-	msg_add(out, buf.sysname);
-	msg_add(out, " ");
-	msg_add(out, buf.release);
-	return (true);
+		return (E2BIG);
+	send(io->sock, MSG(SUCCESS "\n"), MSG_DONTWAIT);
+	delete_io(io);
+	return (ESUCCESS);
+}
+
+#include <sys/utsname.h>	/* uname() */
+int		request_syst(int argc, char **argv, t_user *user, t_io *io)
+{
+	t_data			*data;
+	char			buf[128];
+	struct utsname	ubuf;
+
+	LOG_DEBUG("");
+	(void)argv;
+	(void)user;
+	if (argc > 1)
+		return (E2BIG);
+	if (uname(&ubuf))
+		return (errno);
+	ft_strncpy(buf, ubuf.sysname, sizeof(buf));
+	ft_strncat(buf, " ", sizeof(buf));
+	ft_strncat(buf, ubuf.release, sizeof(buf));
+	data = msg_success(buf);
+	if (!data)
+		return (ENOMEM);
+	push_data(&io->datas_out, data);
+	return (ESUCCESS);
 }
 
 /*
 ** get request
 */
-bool	get_request(t_data *in, t_request *request)
+bool	get_request(t_data *in, t_buf *request)
 {
 	char	*pt;
 
@@ -574,52 +575,77 @@ bool	split_request(t_buf *request, int *argc, char ***argv)
 typedef struct	s_request
 {
 	char	*str;
-	bool	(*func)(int, char **, t_user *, t_io *);
+	int		(*func)(int, char **, t_user *, t_io *);
 }				t_request;
 
-bool	treat_request(int argc, char **argv, t_user *user, t_io *io)
+int		match_request(int argc, char **argv, t_user *user, t_io *io)
 {
 	static t_request	requests[] = {
-		{ "PWD",  request_pwd },
+		//{ "PWD",  request_pwd },
 		{ "USER", request_user },
 		{ "QUIT", request_quit },
 		{ "SYST", request_syst },
-		{ "LS",   request_ls },
-		{ "CD",   request_cd },
-		{ "GET",  request_get },
-		{ "PUT",  request_put }
+		//{ "LS",   request_ls },
+		//{ "CD",   request_cd },
+		//{ "GET",  request_get },
+		//{ "PUT",  request_put }
 	};
 	size_t				i;
 
 	i = 0;
 	while (i < sizeof(requests) / sizeof(requests[0]))
 	{
-		if (!strcmp(argv[0], requests[i].str))
+		if (!ft_strcmp(argv[0], requests[i].str))
 			return (requests[i].func(argc, argv, user, io));
 		i++;
 	}
-	send_msg(io, false, "Invalid request");
-	return (false);
+	return (ENOTSUP);
+}
+
+bool	treat_request(int ac, char **av, t_user *user, t_io *io)
+{
+	t_data	*data;
+	char	*err;
+	int		errnum;
+
+	errnum = match_request(ac, av, user, io);
+	if (errnum)
+	{
+		err = strerror(errnum);
+		if (!err)
+			err = "Undefined error";
+		data = msg_error(err);
+		if (!data)
+			return (false);
+	}
+	return (true);
 }
 
 bool	treat_input_data(t_io *io)
 {
+	int			argc;
+	char		**argv;
 	t_user		*user;
 	t_buf		request;
-	int			ac;
-	char		**av;
 	bool		status;
 
+	LOG_DEBUG("data_in {%.*s}", (int)io->data_in.size, io->data_in.bytes);
 	if (!get_request(&io->data_in, &request))
 		return (true);
-	if (!split_request(&request, &ac, &av))
+	LOG_DEBUG("request {%.*s}", (int)request.size, request.bytes);
+	if (!split_request(&request, &argc, &argv))
 		return (false);
+	ft_memmove(io->data_in.bytes, io->data_in.bytes + request.size, io->data_in.size - request.size);
+	io->data_in.size -= request.size;
+	LOG_DEBUG("data_in {%.*s}", (int)io->data_in.size, io->data_in.bytes);
 	user = get_user(io->sock);
-	status = treat_request(ac, av, user, io);
-	ac = 0;
-	while (av[ac])
-		free(av[ac++]);
-	free(av);
+	LOG_DEBUG("now treating request ..");
+	status = treat_request(argc, argv, user, io);
+	argc = 0;
+	while (argv[argc])
+		free(argv[argc++]);
+	free(argv);
+	LOG_DEBUG("Ok ..");
 	return (status);
 }
 

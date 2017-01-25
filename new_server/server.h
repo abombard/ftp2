@@ -6,8 +6,10 @@
 
 # include <sys/select.h>
 
-# define SUCCESS	"SUCCESS"
-# define ERROR		"ERROR"
+# define SUCCESS				"SUCCESS"
+# define SUCCESS_SIZE	(sizeof("SUCCESS") - 1)
+# define ERROR					"ERROR"
+# define ERROR_SIZE		(sizeof("ERROR") - 1)
 
 # define MSG(msg)	(msg), (sizeof(msg) - 1)
 
