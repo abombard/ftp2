@@ -40,14 +40,6 @@ t_user	*get_user(int sock)
 /*
 ** datas
 */
-bool		data_empty(void)
-{
-	t_server	*server;
-
-	server = get_server();
-	return (list_is_empty(&server->data_fifo));
-}
-
 void		data_clear(t_data *data)
 {
 	data->fd = -1;
@@ -78,7 +70,7 @@ void		data_store(t_data *data)
 	t_server	*server;
 
 	server = get_server();
-	list_add(&data->list, &server->data_fifo);
+	list_move(&data->list, &server->data_fifo);
 }
 
 /*
@@ -123,6 +115,7 @@ t_data		*msg_success(char *msg)
 	ft_strncat(data->bytes, " ", data->size_max);
 	ft_strncat(data->bytes, msg, data->size_max);
 	data->size = ft_strlen(data->bytes);
+	LOG_DEBUG("msg {%.*s}", (int)data->size, data->bytes);
 	return (data);
 }
 
@@ -142,7 +135,7 @@ t_data		*msg_error(char *msg)
 	return (data);
 }
 
-void		push_data(t_list *data_list, t_data *data)
+void		push_data(t_data *data, t_list *data_list)
 {
 	list_add_tail(&data->list, data_list);
 }
@@ -232,6 +225,16 @@ void		data_free(t_data *data)
 //TEMP
 
 /*
+** user
+*/
+void		user_clear(t_user *user)
+{
+	user->name[0] = '\0';
+	user->home[0] = '\0';
+	user->pwd[0] = '\0';
+}
+
+/*
 ** io
 */
 t_io		*get_io(int sock, t_server *server)
@@ -246,6 +249,7 @@ bool		create_io(int sock)
 {
 	t_server	*server;
 	t_io		*io;
+	t_user		*user;
 
 	server = get_server();
 	io = get_io(sock, server);
@@ -265,6 +269,8 @@ bool		create_io(int sock)
 	INIT_LIST_HEAD(&io->datas_out);
 	list_add_tail(&io->list, &server->io_list);
 	io->connected = true;
+	user = get_user(sock);
+	user_clear(user);
 	return (true);
 }
 
@@ -273,6 +279,7 @@ void		delete_io(t_io *io)
 	t_data		*data;
 	t_list		*pos;
 
+	list_del(&io->list);
 	data_free(&io->data_in);
 	while (!list_is_empty(&io->datas_out))
 	{
@@ -297,6 +304,7 @@ static void	fds_set(t_list *io_list, fd_set *fds, int *nfds)
 	{
 		io = CONTAINER_OF(pos, t_io, list);
 		FD_SET(io->sock, &fds[RFDS]);
+		FD_SET(io->sock, &fds[EFDS]);
 		if (!list_is_empty(&io->datas_out))
 			FD_SET(io->sock, &fds[WFDS]);
 		if (io->sock >= *nfds)
@@ -321,8 +329,21 @@ void		sets_prepare(int *nfds)
 }
 
 /*
-** server open / close
+** server open
 */
+void	data_fifo_teardown(t_server *server)
+{
+	size_t	i;
+
+	INIT_LIST_HEAD(&server->data_fifo);
+	i = 0;
+	while (i < sizeof(server->data_array) / sizeof(server->data_array[0]))
+	{
+		list_add_tail(&server->data_array[i].list, &server->data_fifo);
+		i++;
+	}
+}
+
 #include "listen_socket.h"
 #include "sock.h"
 bool	server_open(char *host, int port)
@@ -337,6 +358,7 @@ bool	server_open(char *host, int port)
 	server->listen = listen_socket(host, port);
 	if (server->listen == -1)
 		return (false);
+	data_fifo_teardown(server);
 	INIT_LIST_HEAD(&server->io_list);
 	i = 0;
 	while (i < sizeof(server->io_array) / sizeof(server->io_array[0]))
@@ -350,6 +372,9 @@ bool	server_open(char *host, int port)
 	return (true);
 }
 
+/*
+** server close
+*/
 bool	server_close(void)
 {
 	t_server	*server;
@@ -414,7 +439,6 @@ bool	handle_new_connections(void)
 	return (true);
 }
 
-
 bool	int_recv_data(int sock, t_data *data)
 {
 	data->nbytes = recv(sock, data->bytes + data->size, data->size_max - data->size, MSG_DONTWAIT);
@@ -423,6 +447,11 @@ bool	int_recv_data(int sock, t_data *data)
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
 			return (true);
 		perror("recv", errno);
+		return (false);
+	}
+	if (data->nbytes == 0)
+	{
+		//TEMP EOF
 		return (false);
 	}
 	LOG_DEBUG("recv {%.*s}", (int)data->nbytes, data->bytes + data->size);
@@ -437,7 +466,23 @@ bool	recv_data(t_io *io)
 	server = get_server();
 	if (!FD_ISSET(io->sock, &server->fds[RFDS]))
 		return (true);
-	return (int_recv_data(io->sock, &io->data_in));
+	if (!int_recv_data(io->sock, &io->data_in))
+	{
+		delete_io(io);
+		return (false);
+	}
+	return (true);
+}
+
+bool	check_efds(t_io *io)
+{
+	t_server	*server;
+
+	server = get_server();
+	if (!FD_ISSET(io->sock, &server->fds[EFDS]))
+		return (true);
+	LOG_DEBUG("sock %d in EFDS", io->sock);
+	return (true);
 }
 
 bool	int_send_data(int sock, t_data *data)
@@ -460,13 +505,20 @@ bool	send_data(t_io *io)
 	t_server	*server;
 	t_data		*data;
 	t_list		*pos;
+	bool		success;
 
 	server = get_server();
 	if (!FD_ISSET(io->sock, &server->fds[WFDS]))
 		return (true);
 	pos = list_nth(&io->datas_out, 1);
 	data = CONTAINER_OF(pos, t_data, list);
-	return (int_send_data(io->sock, data));
+	success = int_send_data(io->sock, data);
+	if (data->offset == data->size)
+	{
+		data_free(data);
+		data_store(data);
+	}
+	return (success);
 }
 
 /*
@@ -517,7 +569,6 @@ int		request_syst(int argc, char **argv, t_user *user, t_io *io)
 	char			buf[128];
 	struct utsname	ubuf;
 
-	LOG_DEBUG("");
 	(void)argv;
 	(void)user;
 	if (argc > 1)
@@ -530,7 +581,7 @@ int		request_syst(int argc, char **argv, t_user *user, t_io *io)
 	data = msg_success(buf);
 	if (!data)
 		return (ENOMEM);
-	push_data(&io->datas_out, data);
+	push_data(data, &io->datas_out);
 	return (ESUCCESS);
 }
 
@@ -617,6 +668,7 @@ bool	treat_request(int ac, char **av, t_user *user, t_io *io)
 		data = msg_error(err);
 		if (!data)
 			return (false);
+		push_data(data, &io->datas_out);
 	}
 	return (true);
 }
@@ -635,11 +687,11 @@ bool	treat_input_data(t_io *io)
 	LOG_DEBUG("request {%.*s}", (int)request.size, request.bytes);
 	if (!split_request(&request, &argc, &argv))
 		return (false);
+	request.size += 1;
 	ft_memmove(io->data_in.bytes, io->data_in.bytes + request.size, io->data_in.size - request.size);
 	io->data_in.size -= request.size;
 	LOG_DEBUG("data_in {%.*s}", (int)io->data_in.size, io->data_in.bytes);
 	user = get_user(io->sock);
-	LOG_DEBUG("now treating request ..");
 	status = treat_request(argc, argv, user, io);
 	argc = 0;
 	while (argv[argc])
@@ -652,23 +704,24 @@ bool	treat_input_data(t_io *io)
 /*
 ** server loop
 */
-bool	foreach_io(bool (*io_func)(t_io *))
+void	foreach_io(bool (*io_func)(t_io *))
 {
 	t_server	*server;
 	t_io		*io;
 	t_list		*pos;
+	t_list		*safe;
 	int			nfails;
 
 	server = get_server();
 	nfails = 0;
-	pos = &server->io_list;
-	while ((pos = pos->next) != &server->io_list)
+	safe = server->io_list.next;
+	while ((pos = safe) != &server->io_list && (safe = pos->next))
 	{
 		io = CONTAINER_OF(pos, t_io, list);
 		if (!io_func(io))
 			nfails++;
 	}
-	return (nfails ? false : true);
+	LOG_DEBUG("foreach_io nfails %d", nfails);
 }
 
 bool	server_loop(void)
@@ -686,14 +739,12 @@ bool	server_loop(void)
 	if (!handle_new_connections())
 		return (false);
 
-	if (!foreach_io(&recv_data))
-		LOG_ERROR("foreach_io failed on recv_data");
-	if (!foreach_io(&send_data))
-		LOG_ERROR("foreach_io failed on send_data");
+	foreach_io(&check_efds);
+	foreach_io(&recv_data);
+	foreach_io(&send_data);
 
 	// check requests
-	if (!foreach_io(&treat_input_data))
-		LOG_ERROR("foreach_io failed on treat_input_data");
+	foreach_io(&treat_input_data);
 
 	return (true);
 }
