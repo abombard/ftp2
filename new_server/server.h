@@ -39,6 +39,7 @@ typedef struct	s_io
 	bool	connected;
 	int		sock;
 	t_data	data_in;
+	char	*data_in_buf;
 	t_list	datas_out;
 }				t_io;
 

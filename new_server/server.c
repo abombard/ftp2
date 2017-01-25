@@ -78,6 +78,7 @@ t_data		*data_pull(void)
 	pos = list_nth(&server->data_fifo, 1);
 	data = CONTAINER_OF(pos, t_data, list);
 	data_clear(data);
+	list_del(&data->list);
 	return (data);
 }
 
@@ -168,16 +169,25 @@ void		push_data(t_data *data, t_list *data_list)
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
-int			data_recv_file(t_data *data, char *file, size_t size)
+
+/*
+** recv file
+*/
+int			data_recv_file(char *file, size_t size, t_data *data)
 {
 	int		fd;
 	char	*map;
 	int		err;
 
-	// What if size == 0 ?
-	fd = open(file, O_CREAT | O_EXCL | O_WRONLY, 0644);
+	LOG_DEBUG("recv_file {%s} size %zu", file, size);
+	fd = open(file, O_CREAT | O_EXCL | O_RDWR, 0644);
 	if (fd == -1)
 		return (errno);
+	if (size == 0)
+	{
+		close(fd);
+		return (ESUCCESS);
+	}
 	map = mmap(0, size, PROT_WRITE, MAP_PRIVATE, fd, 0);
 	if (map == MAP_FAILED)
 	{
@@ -190,9 +200,12 @@ int			data_recv_file(t_data *data, char *file, size_t size)
 	data->offset = 0;
 	data->size = size;
 	data->size_max = size;
-	return (true);
+	return (ESUCCESS);
 }
 
+/*
+** send file
+*/
 int		get_file_size(int fd, size_t *size)
 {
 	struct stat	sb;
@@ -241,8 +254,10 @@ int		data_send_file(char *file, t_data *data)
 
 	return (ESUCCESS);
 }
-/* //TEMP */
 
+/*
+** data free
+*/
 void		data_free_file(t_data *data)
 {
 	if (munmap(data->bytes, data->size_max))
@@ -283,8 +298,16 @@ t_io		*get_io(int sock, t_server *server)
 	return (&server->io_array[sock]);
 }
 
+void		io_input_teardown(t_io *io)
+{
+	io->data_in.bytes = io->data_in_buf;
+	io->data_in.size_max = MSG_SIZE_MAX;
+	io->data_in.size = 0;
+	io->data_in.offset = 0;
+}
+
 #include "sock.h"
-bool		create_io(int sock)
+int			create_io(int sock)
 {
 	t_server	*server;
 	t_io		*io;
@@ -293,24 +316,18 @@ bool		create_io(int sock)
 	server = get_server();
 	io = get_io(sock, server);
 	if (!io)
-	{
-		LOG_ERROR("get_io failed sock %d", sock);
-		return (false);
-	}
+		return (EUSERS);
 	data_clear(&io->data_in);
-	io->data_in.bytes = (char *)malloc(MSG_SIZE_MAX + 1);
-	if (!io->data_in.bytes)
-	{
-		perror("malloc", errno);
-		return (false);
-	}
-	io->data_in.size_max = MSG_SIZE_MAX + 1;
+	io->data_in_buf = (char *)malloc(MSG_SIZE_MAX + 1);
+	if (!io->data_in_buf)
+		return (errno);
+	io_input_teardown(io);
 	INIT_LIST_HEAD(&io->datas_out);
 	list_add_tail(&io->list, &server->io_list);
 	io->connected = true;
 	user = get_user(sock);
 	user_clear(user);
-	return (true);
+	return (ESUCCESS);
 }
 
 void		delete_io(t_io *io)
@@ -319,7 +336,7 @@ void		delete_io(t_io *io)
 	t_list		*pos;
 
 	list_del(&io->list);
-	data_free(&io->data_in);
+	free(io->data_in_buf);
 	while (!list_is_empty(&io->datas_out))
 	{
 		pos = list_nth(&io->datas_out, 1);
@@ -464,6 +481,8 @@ bool	handle_new_connections(void)
 	t_server	*server;
 	int			sock;
 	ssize_t		size;
+	int			errnum;
+	char		*err;
 
 	server = get_server();
 	if (!FD_ISSET(server->listen, &server->fds[RFDS]))
@@ -471,9 +490,11 @@ bool	handle_new_connections(void)
 	sock = accept_connection(server->listen);
 	if (sock == -1)
 		return (false);
-	if (!create_io(sock))
+	errnum = create_io(sock);
+	if (errnum)
 	{
-		size = send(sock, MSG("ERROR Too many users\n"), MSG_DONTWAIT);
+		err = strerror(errnum);
+		size = send(sock, err, ft_strlen(err), MSG_DONTWAIT);
 		if (size == -1)
 			perror("send", errno);
 		close_socket(sock);
@@ -493,7 +514,7 @@ bool	int_recv_data(int sock, t_data *data)
 		perror("recv", errno);
 		return (false);
 	}
-	if (data->nbytes == 0)
+	if (data->nbytes == 0 && data->size != data->size_max)
 	{
 		//TEMP EOF
 		return (false);
@@ -514,6 +535,14 @@ bool	recv_data(t_io *io)
 	{
 		delete_io(io);
 		return (false);
+	}
+	if (io->data_in.size == io->data_in.size_max)
+	{
+		if (io->data_in.fd != -1)
+		{
+			data_free_file(&io->data_in);
+			io_input_teardown(io);
+		}
 	}
 	return (true);
 }
@@ -772,6 +801,28 @@ int		request_get(int argc, char **argv, t_user *user, t_io *io)
 	return (ESUCCESS);
 }
 
+int		request_put(int argc, char **argv, t_user *user, t_io *io)
+{
+	char	path[PATH_SIZE_MAX + 1];
+	int		size;
+	int		err;
+
+	(void)user;
+	if (argc != 3)
+		return (EARGS);
+	size = ft_atoi(argv[2]);
+	if (size < 0)
+		return (EINVAL);
+	get_path(user->pwd, argv[1], PATH_SIZE_MAX, path);
+	err = data_recv_file(path, size, &io->data_in);
+	if (err)
+	{
+		io_input_teardown(io);
+		return (err);
+	}
+	return (ESUCCESS);
+}
+
 /*
 ** get request
 */
@@ -826,7 +877,7 @@ int		match_request(int argc, char **argv, t_user *user, t_io *io)
 		{ "LS",   request_ls },
 		{ "CD",   request_cd },
 		{ "GET",  request_get },
-		//{ "PUT",  request_put }
+		{ "PUT",  request_put }
 	};
 	size_t				i;
 
