@@ -28,26 +28,37 @@ size_t	concat_safe(char *buf, size_t offset, size_t size_max, char *s)
 	return (offset + size);
 }
 
-/*
-** server
-*/
-t_server	*get_server(void)
+void	get_path(char *pwd, char *in_path, size_t size_max, char *path)
 {
-	static t_server	server = {
-		.listen = -1
-	};
+	if (in_path[0] == '/')
+	{
+		ft_strncpy(path, in_path, size_max);
+	}
+	else
+	{
+		ft_strncpy(path, pwd, size_max);
+		ft_strncat(path, "/", size_max);
+		ft_strncat(path, in_path, size_max);
+	}
+}
 
-	return (&server);
+int		check_perm(t_user *user, char *path)
+{
+	struct stat	sb;
+	char		c;
+	char		*pt;
+
+	if (lstat(path, &sb))
+		return (errno);
+	if (S_ISDIR(sb.st_mode))
+		
 }
 
 /*
 ** user
 */
-t_user	*get_user(int sock)
+t_user	*get_user(int sock, t_server *server)
 {
-	t_server	*server;
-
-	server = get_server();
 	if (sock < 0 || (unsigned long)sock >= sizeof(server->user_array) / sizeof(server->user_array[0]))
 		return (NULL);
 	return (&server->user_array[sock]);
@@ -58,6 +69,7 @@ t_user	*get_user(int sock)
 */
 void		data_clear(t_data *data)
 {
+	INIT_LIST_HEAD(&data->list);
 	data->fd = -1;
 	data->bytes = NULL;
 	data->offset = 0;
@@ -65,58 +77,38 @@ void		data_clear(t_data *data)
 	data->size_max = 0;
 }
 
-#include "list.h"
-t_data		*data_pull(void)
-{
-	t_server	*server;
-	t_data		*data;
-	t_list		*pos;
-
-	server = get_server();
-	if (list_is_empty(&server->data_fifo))
-		return (NULL);
-	pos = list_nth(&server->data_fifo, 1);
-	data = CONTAINER_OF(pos, t_data, list);
-	data_clear(data);
-	list_del(&data->list);
-	return (data);
-}
-
-void		data_store(t_data *data)
-{
-	t_server	*server;
-
-	server = get_server();
-	list_move(&data->list, &server->data_fifo);
-}
-
 /*
 ** data msg
 */
 #include <stdlib.h>
-t_data		*data_pull_msg(size_t size)
+t_data		*alloc_data(void)
 {
 	t_data	*data;
 
-	data = data_pull();
+	data = (t_data *)malloc(sizeof(t_data));
 	if (!data)
-	{
-		LOG_ERROR("data_pull failed");
-		return (NULL);
-	}
-	data->bytes = (char *)malloc(size + 1);
-	if (!data->bytes)
 	{
 		perror("malloc", errno);
 		return (NULL);
 	}
-	data->size_max = size;
+	data_clear(data);
 	return (data);
 }
 
-void		data_free_msg(t_data *data)
+t_data		*alloc_data_msg(size_t size)
 {
-	free(data->bytes);
+	t_data	*data;
+
+	data = malloc(sizeof(t_data) + size + 1);
+	if (!data)
+	{
+		perror("malloc", errno);
+		return (NULL);
+	}
+	data_clear(data);
+	data->bytes = (void *)data + sizeof(t_data);
+	data->size_max = size;
+	return (data);
 }
 
 t_data		*msg_success(char *msg)
@@ -125,7 +117,7 @@ t_data		*msg_success(char *msg)
 	size_t	msg_size;
 
 	msg_size = SUCCESS_SIZE + sizeof(" ") - 1 + ft_strlen(msg);
-	data = data_pull_msg(msg_size);
+	data = alloc_data_msg(msg_size);
 	if (!data)
 		return (NULL);
 	ft_strncpy(data->bytes, SUCCESS, data->size_max);
@@ -144,7 +136,7 @@ t_data		*msg_error(char *msg)
 	size_t	msg_size;
 
 	msg_size = ERROR_SIZE + sizeof(" ") - 1 + ft_strlen(msg);
-	data = data_pull_msg(msg_size);
+	data = alloc_data_msg(msg_size);
 	if (!data)
 		return (NULL);
 	ft_strncpy(data->bytes, ERROR, data->size_max);
@@ -266,7 +258,7 @@ int		data_send_file(char *file, t_data *data)
 /*
 ** data free
 */
-void		data_free_file(t_data *data)
+void		free_file(t_data *data)
 {
 	if (munmap(data->bytes, data->size_max))
 		perror("munmap", errno);
@@ -274,26 +266,23 @@ void		data_free_file(t_data *data)
 		perror("close", errno);
 }
 
-void		data_free(t_data *data)
+void		free_data(t_data *data)
 {
 	LOG_DEBUG("free {%.*s} fd %d size %zu size_max %zu", (int)data->size, data->bytes, data->fd, data->size, data->size_max);
-	if (data->fd == -1)
-		data_free_msg(data);
-	else
-		data_free_file(data);
+	list_del(&data->list);
+	if (data->fd != -1)
+		free_file(data);
+	free(data);
 }
 
 /*
 ** user
 */
-void		user_clear(t_user *user)
+void		user_init(t_user *user, char *home)
 {
-	t_server	*server;
-
-	server = get_server();
 	user->name[0] = '\0';
-	ft_strncpy(user->home, server->home, PATH_SIZE_MAX);
-	ft_strncpy(user->pwd, server->home, PATH_SIZE_MAX);
+	ft_strncpy(user->home, home, PATH_SIZE_MAX);
+	ft_strncpy(user->pwd, home, PATH_SIZE_MAX);
 }
 
 /*
@@ -309,33 +298,31 @@ t_io		*get_io(int sock, t_server *server)
 void		io_input_teardown(t_io *io)
 {
 	io->data_in.fd = -1;
-	io->data_in.bytes = io->data_in_buf;
-	io->data_in.size_max = MSG_SIZE_MAX;
+	io->data_in.bytes = io->input_buffer;
+	io->data_in.size_max = INPUT_BUFFER_SIZE;
 	io->data_in.size = 0;
 	io->data_in.offset = 0;
 }
 
 #include "sock.h"
-int			create_io(int sock)
+int			create_io(int sock, t_server *server)
 {
-	t_server	*server;
 	t_io		*io;
 	t_user		*user;
 
-	server = get_server();
 	io = get_io(sock, server);
 	if (!io)
 		return (EUSERS);
 	data_clear(&io->data_in);
-	io->data_in_buf = (char *)malloc(MSG_SIZE_MAX + 1);
-	if (!io->data_in_buf)
+	io->input_buffer = (char *)malloc(INPUT_BUFFER_SIZE);
+	if (!io->input_buffer)
 		return (errno);
 	io_input_teardown(io);
 	INIT_LIST_HEAD(&io->datas_out);
 	list_add_tail(&io->list, &server->io_list);
 	io->connected = true;
-	user = get_user(sock);
-	user_clear(user);
+	user = get_user(sock, server);
+	user_init(user, server->home);
 	return (ESUCCESS);
 }
 
@@ -346,13 +333,13 @@ void		delete_io(t_io *io)
 
 	list_del(&io->list);
 	if (io->data_in.fd != -1)
-		data_free(&io->data_in);
-	free(io->data_in_buf);
+		free_data(&io->data_in);
+	free(io->input_buffer);
 	while (!list_is_empty(&io->datas_out))
 	{
 		pos = list_nth(&io->datas_out, 1);
 		data = CONTAINER_OF(pos, t_data, list);
-		data_free(data);
+		free_data(data);
 	}
 	close_socket(io->sock);
 	io->connected = false;
@@ -379,12 +366,8 @@ static void	fds_set(t_list *io_list, fd_set *fds, int *nfds)
 	}
 }
 
-void		sets_prepare(int *nfds)
+void		sets_prepare(t_server *server, int *nfds)
 {
-	t_server	*server;
-
-	server = get_server();
-
 	FD_ZERO(&server->fds[RFDS]);
 	FD_ZERO(&server->fds[WFDS]);
 	FD_ZERO(&server->fds[EFDS]);
@@ -398,34 +381,18 @@ void		sets_prepare(int *nfds)
 /*
 ** server open
 */
-void	data_fifo_teardown(t_server *server)
-{
-	size_t	i;
-
-	INIT_LIST_HEAD(&server->data_fifo);
-	i = 0;
-	while (i < sizeof(server->data_array) / sizeof(server->data_array[0]))
-	{
-		list_add_tail(&server->data_array[i].list, &server->data_fifo);
-		i++;
-	}
-}
-
 #include "listen_socket.h"
 #include "sock.h"
-bool	server_open(char *host, int port)
+bool	server_open(char *host, int port, t_server *server)
 {
-	t_server	*server;
 	t_io		*io;
 	size_t		i;
 
-	server = get_server();
 	server->host = host;
 	server->port = port;
 	server->listen = listen_socket(host, port);
 	if (server->listen == -1)
 		return (false);
-	data_fifo_teardown(server);
 	INIT_LIST_HEAD(&server->io_list);
 	i = 0;
 	while (i < sizeof(server->io_array) / sizeof(server->io_array[0]))
@@ -441,17 +408,16 @@ bool	server_open(char *host, int port)
 	if (!home)
 		home = "/tmp";
 	ft_strncpy(server->home, home, PATH_SIZE_MAX);
+	LOG_DEBUG("home: %s", server->home);
+
 	return (true);
 }
 
 /*
 ** server close
 */
-bool	server_close(void)
+bool	server_close(t_server *server)
 {
-	t_server	*server;
-
-	server = get_server();
 	close_socket(server->listen);
 	return (true);
 }
@@ -459,12 +425,9 @@ bool	server_close(void)
 /*
 ** server loop
 */
-bool	fds_availables(int nfds, int *ready)
+bool	fds_availables(int nfds, t_server *server, int *ready)
 {
-	t_server		*server;
 	struct timeval	tv;
-
-	server = get_server();
 
 	tv.tv_sec = 10;
 	tv.tv_usec = 0;
@@ -479,7 +442,10 @@ bool	fds_availables(int nfds, int *ready)
 	if (*ready == -1)
 	{
 		if (errno == EINTR)
+		{
+			LOG_DEBUG("select caught a signal");
 			return (true);
+		}
 		perror("select", errno);
 		return (false);
 	}
@@ -487,21 +453,20 @@ bool	fds_availables(int nfds, int *ready)
 	return (true);
 }
 
-bool	handle_new_connections(void)
+bool	handle_new_connections(t_server *server, bool *new_user)
 {
-	t_server	*server;
 	int			sock;
 	ssize_t		size;
 	int			errnum;
 	char		*err;
 
-	server = get_server();
+	*new_user = false;
 	if (!FD_ISSET(server->listen, &server->fds[RFDS]))
 		return (true);
 	sock = accept_connection(server->listen);
 	if (sock == -1)
 		return (false);
-	errnum = create_io(sock);
+	errnum = create_io(sock, server);
 	if (errnum)
 	{
 		err = strerror(errnum);
@@ -512,6 +477,7 @@ bool	handle_new_connections(void)
 		return (false);
 	}
 	LOG_DEBUG("new user connected");
+	*new_user = true;
 	return (true);
 }
 
@@ -536,11 +502,8 @@ bool	int_recv_data(int sock, t_data *data)
 	return (true);
 }
 
-bool	recv_data(t_io *io)
+bool	recv_data(t_server *server, t_io *io)
 {
-	t_server	*server;
-
-	server = get_server();
 	if (!FD_ISSET(io->sock, &server->fds[RFDS]))
 		return (true);
 	if (!int_recv_data(io->sock, &io->data_in))
@@ -552,18 +515,15 @@ bool	recv_data(t_io *io)
 	{
 		if (io->data_in.fd != -1)
 		{
-			data_free_file(&io->data_in);
+			free_data(&io->data_in);
 			io_input_teardown(io);
 		}
 	}
 	return (true);
 }
 
-bool	check_efds(t_io *io)
+bool	check_efds(t_server *server, t_io *io)
 {
-	t_server	*server;
-
-	server = get_server();
 	if (!FD_ISSET(io->sock, &server->fds[EFDS]))
 		return (true);
 	LOG_DEBUG("sock %d in EFDS", io->sock);
@@ -585,23 +545,22 @@ bool	int_send_data(int sock, t_data *data)
 	return (true);
 }
 
-bool	send_data(t_io *io)
+bool	send_data(t_server *server, t_io *io)
 {
-	t_server	*server;
 	t_data		*data;
 	t_list		*pos;
 	bool		success;
 
-	server = get_server();
 	if (!FD_ISSET(io->sock, &server->fds[WFDS]))
 		return (true);
-	pos = list_nth(&io->datas_out, 1);
-	data = CONTAINER_OF(pos, t_data, list);
-	success = int_send_data(io->sock, data);
-	if (data->offset == data->size)
+	while (!list_is_empty(&io->datas_out))
 	{
-		data_free(data);
-		data_store(data);
+		pos = list_nth(&io->datas_out, 1);
+		data = CONTAINER_OF(pos, t_data, list);
+		success = int_send_data(io->sock, data);
+		if (data->offset != data->size)
+			break ;
+		free_data(data);
 	}
 	return (success);
 }
@@ -618,7 +577,7 @@ int	request_pwd(int argc, char **argv, t_user *user, t_io *io)
 		return (E2BIG);
 	data = msg_success(user->pwd);
 	if (!data)
-		return (ENOMEM);
+		return (errno);
 	push_data(data, &io->datas_out);
 	return (ESUCCESS);
 }
@@ -636,7 +595,7 @@ int		request_user(int argc, char **argv, t_user *user, t_io *io)
 			return (ENOTREGISTER);
 		data = msg_success(user->name);
 		if (!data)
-			return (ENOMEM);
+			return (errno);
 		push_data(data, &io->datas_out);
 	}
 	else if (argc == 2)
@@ -644,7 +603,7 @@ int		request_user(int argc, char **argv, t_user *user, t_io *io)
 		ft_strncpy(user->name, argv[1], NAME_SIZE_MAX);
 		data = msg_success(user->name);
 		if (!data)
-			return (ENOMEM);
+			return (errno);
 		push_data(data, &io->datas_out);
 	}
 	return (ESUCCESS);
@@ -679,23 +638,9 @@ int		request_syst(int argc, char **argv, t_user *user, t_io *io)
 	ft_strncat(buf, ubuf.release, sizeof(buf));
 	data = msg_success(buf);
 	if (!data)
-		return (ENOMEM);
+		return (errno);
 	push_data(data, &io->datas_out);
 	return (ESUCCESS);
-}
-
-void	get_path(char *pwd, char *in_path, size_t size_max, char *path)
-{
-	if (in_path[0] == '/')
-	{
-		ft_strncpy(path, in_path, size_max);
-	}
-	else
-	{
-		ft_strncpy(path, pwd, size_max);
-		ft_strncat(path, "/", size_max);
-		ft_strncat(path, in_path, size_max);
-	}
 }
 
 #include <dirent.h>
@@ -741,7 +686,7 @@ int		request_ls(int argc, char **argv, t_user *user, t_io *io)
 
 	data = msg_success(buf);
 	if (!data)
-		return (ENOMEM);
+		return (errno);
 	push_data(data, &io->datas_out);
 
 	return (ESUCCESS);
@@ -751,6 +696,8 @@ int		request_cd(int argc, char **argv, t_user *user, t_io *io)
 {
 	char	*pwd_argv[2];
 	char	path[PATH_SIZE_MAX + 1];
+	char	pwd[PATH_SIZE_MAX + 1];
+	size_t	size;
 
 	if (argc > 2)
 		return (E2BIG);
@@ -763,8 +710,15 @@ int		request_cd(int argc, char **argv, t_user *user, t_io *io)
 	if (chdir(path))
 		return (errno);
 
-	if (!getcwd(user->pwd, PATH_SIZE_MAX))
+	if (!getcwd(pwd, PATH_SIZE_MAX))
 		return (errno);
+
+	size = ft_strlen(user->home);
+	if (ft_memcmp(pwd, user->home, size) ||
+		(pwd[size] != '/' && pwd[size] != '\0'))
+		return (EPERM);
+
+	ft_strncpy(user->pwd, pwd, PATH_SIZE_MAX);
 
 	pwd_argv[0] = "PWD";
 	pwd_argv[1] = NULL;
@@ -781,31 +735,30 @@ int		request_get(int argc, char **argv, t_user *user, t_io *io)
 
 	if (argc != 2)
 		return (EARGS);
-	file = data_pull();
+	file = alloc_data();
 	if (!file)
-		return (ENOMEM);
+		return (errno);
 	get_path(user->pwd, argv[1], PATH_SIZE_MAX, path);
 	err = data_send_file(path, file);
 	if (err)
 	{
-		data_store(file);
+		free_data(file);
 		return (err);
 	}
 	file_size_str = ft_itoa(file->size_max);
 	if (!file_size_str)
 	{
 		err = errno;
-		data_free(file);
-		data_store(file);
+		free_data(file);
 		return (err);
 	}
 	file_size = msg_success(file_size_str);
 	if (!file_size)
 	{
+		err = errno;
 		free(file_size_str);
-		data_free(file);
-		data_store(file);
-		return (ENOMEM);
+		free_data(file);
+		return (err);
 	}
 	free(file_size_str);
 	push_data(file_size, &io->datas_out);
@@ -828,10 +781,7 @@ int		request_put(int argc, char **argv, t_user *user, t_io *io)
 	get_path(user->pwd, argv[1], PATH_SIZE_MAX, path);
 	err = data_recv_file(path, size, &io->data_in);
 	if (err)
-	{
-		io_input_teardown(io);
 		return (err);
-	}
 	return (ESUCCESS);
 }
 
@@ -862,7 +812,7 @@ int		match_request(int argc, char **argv, t_user *user, t_io *io)
 			return (requests[i].func(argc, argv, user, io));
 		i++;
 	}
-	return (EINVALREQUEST);
+	return (EBADRQC);
 }
 
 bool	treat_request(int ac, char **av, t_user *user, t_io *io)
@@ -921,7 +871,7 @@ bool	split_request(t_buf *request, int *argc, char ***argv)
 	return (true);
 }
 
-bool	treat_input_data(t_io *io)
+bool	treat_input_data(t_server *server, t_io *io)
 {
 	int			argc;
 	char		**argv;
@@ -942,7 +892,7 @@ bool	treat_input_data(t_io *io)
 	LOG_DEBUG("data_in {%.*s}", (int)io->data_in.size, io->data_in.bytes);
 	if (!argv)
 		return (false);
-	user = get_user(io->sock);
+	user = get_user(io->sock, server);
 	status = treat_request(argc, argv, user, io);
 	argc = 0;
 	while (argv[argc])
@@ -955,47 +905,48 @@ bool	treat_input_data(t_io *io)
 /*
 ** server loop
 */
-void	foreach_io(bool (*io_func)(t_io *))
+void	foreach_io(t_server *server, bool (*io_func)(t_server *, t_io *))
 {
-	t_server	*server;
 	t_io		*io;
 	t_list		*pos;
 	t_list		*safe;
 	int			nfails;
 
-	server = get_server();
 	nfails = 0;
 	safe = server->io_list.next;
 	while ((pos = safe) != &server->io_list && (safe = pos->next))
 	{
 		io = CONTAINER_OF(pos, t_io, list);
-		if (!io_func(io))
+		if (!io_func(server, io))
 			nfails++;
 	}
 	LOG_DEBUG("foreach_io nfails %d", nfails);
 }
 
-bool	server_loop(void)
+bool	server_loop(t_server *server)
 {
-	int				nfds;
-	int				ready;
+	int		nfds;
+	int		ready;
+	bool	new_user;
 
-	sets_prepare(&nfds);
+	sets_prepare(server, &nfds);
 
-	if (!fds_availables(nfds, &ready))
+	if (!fds_availables(nfds, server, &ready))
 		return (false);
 	if (ready == 0)
 		return (true);
 
-	if (!handle_new_connections())
+	if (!handle_new_connections(server, &new_user))
 		return (false);
+	if (new_user)
+		return (true);
 
-	foreach_io(&check_efds);
-	foreach_io(&recv_data);
-	foreach_io(&send_data);
+	foreach_io(server, &check_efds);
 
-	// check requests
-	foreach_io(&treat_input_data);
+	foreach_io(server, &send_data);
+	foreach_io(server, &recv_data);
+
+	foreach_io(server, &treat_input_data);
 
 	return (true);
 }
@@ -1004,24 +955,21 @@ bool	server_loop(void)
 ** main
 */
 #include <unistd.h>
-static bool	run = true;
+static volatile bool	run = true;
 
 void	sighandler(int sig)
 {
 	(void)sig;
+	LOG_DEBUG("catch SIGINT");
 	run = false;
 }
 
 int		main(int argc, char **argv)
 {
+	t_server	server;
 	char		*host;
 	int			port;
 
-	if (signal(SIGINT, sighandler) == SIG_ERR)
-	{
-		perror("signal", errno);
-		return (EXIT_FAILURE);
-	}
 	if (argc != 3)
 	{
 		ft_fprintf(2, "Usage: %s host port\n", argv[0]);
@@ -1029,20 +977,25 @@ int		main(int argc, char **argv)
 	}
 	host = argv[1];
 	port = ft_atoi(argv[2]);
-	if (!server_open(host, port))
+	if (signal(SIGINT, sighandler) == SIG_ERR)
+	{
+		perror("signal", errno);
+		return (EXIT_FAILURE);
+	}
+	if (!server_open(host, port, &server))
 	{
 		LOG_ERROR("server_open failed host {%s} port {%s}", argv[1], argv[2]);
 		return (EXIT_FAILURE);
 	}
 	while (run)
 	{
-		if (!server_loop())
+		if (!server_loop(&server))
 		{
 			LOG_ERROR("server_loop failed");
 			break ;
 		}
 	}
-	if (!server_close())
+	if (!server_close(&server))
 	{
 		LOG_ERROR("server_close failed");
 		return (EXIT_FAILURE);

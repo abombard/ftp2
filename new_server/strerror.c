@@ -122,7 +122,7 @@ static char *err_str[] = {
 	[EXFULL] = "Exchange full",
 	[EARGS] = "Invalid number of arguments",
 	[ENOTREGISTER] = "Not registered",
-	[EINVALREQUEST] = "Invalid request"
+	[EFTYPE] = "Inappropriate file type or format"
 };
 #endif
 
@@ -237,7 +237,7 @@ static char *err_str[] = {
 	[EQFULL] = "Interface output queue is full",
 	[EARGS] = "Invalid number of arguments",
 	[ENOTREGISTER] = "Not registered",
-	[EINVALREQUEST] = "Invalid request"
+	[EBADRQC] = "Invalid request code"
 };
 #endif
 

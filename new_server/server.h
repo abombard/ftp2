@@ -39,7 +39,7 @@ typedef struct	s_io
 	bool	connected;
 	int		sock;
 	t_data	data_in;
-	char	*data_in_buf;
+	char	*input_buffer;
 	t_list	datas_out;
 }				t_io;
 
@@ -60,7 +60,7 @@ typedef struct	s_user
 */
 # define CONNECTION_COUNT_MAX		63
 # define DATA_COUNT_MAX				(CONNECTION_COUNT_MAX * 2)
-# define MSG_SIZE_MAX				255
+# define INPUT_BUFFER_SIZE			255
 
 # define WFDS		0
 # define RFDS		1
@@ -74,8 +74,7 @@ typedef struct	s_server
 
 	int		listen;
 
-	t_list	data_fifo;
-	t_data	data_array[DATA_COUNT_MAX];
+	int		sig_warn;
 
 	t_list	io_list;
 	t_io	io_array[CONNECTION_COUNT_MAX];

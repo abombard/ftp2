@@ -3,19 +3,19 @@
 
 #include <errno.h>
 
-#define __MACOSX__
+#define __LINUX__
 
 # define ESUCCESS		0
 
 # ifdef __LINUX__
-# define EARGS			(int)(EXFULL + 1)
-# define ENOTREGISTER	(int)(EXFULL + 2)
-# define EINVALREQUEST	(int)(EXFULL + 3)
+# define EARGS			(int)(EHWPOISON + 1)
+# define ENOTREGISTER	(int)(EHWPOISON + 2)
+# define EFTYPE			(int)(EHWPOISON + 3)
 # endif
 # ifdef __MACOSX__
 # define EARGS			(int)(EQFULL + 1)
 # define ENOTREGISTER	(int)(EQFULL + 2)
-# define EINVALREQUEST	(int)(EQFULL + 3)
+# define EBADRQC		(int)(EQFULL + 3)
 # endif
 
 char	*strerror(int err_num);
