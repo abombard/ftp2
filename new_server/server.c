@@ -28,30 +28,43 @@ size_t	concat_safe(char *buf, size_t offset, size_t size_max, char *s)
 	return (offset + size);
 }
 
-void	get_path(char *pwd, char *in_path, size_t size_max, char *path)
+void	concat_path(char *pwd, char *in_path, char *path)
 {
 	if (in_path[0] == '/')
 	{
-		ft_strncpy(path, in_path, size_max);
+		ft_strncpy(path, in_path, PATH_SIZE_MAX);
 	}
 	else
 	{
-		ft_strncpy(path, pwd, size_max);
-		ft_strncat(path, "/", size_max);
-		ft_strncat(path, in_path, size_max);
+		ft_strncpy(path, pwd, PATH_SIZE_MAX);
+		ft_strncat(path, "/", PATH_SIZE_MAX);
+		ft_strncat(path, in_path, PATH_SIZE_MAX);
 	}
 }
 
-int		check_perm(t_user *user, char *path)
+int		check_permission(char *path, t_user *user)
 {
-	struct stat	sb;
-	char		c;
-	char		*pt;
+	size_t	size;
 
-	if (lstat(path, &sb))
+	size = ft_strlen(user->home);
+	if (ft_memcmp(path, user->home, size) ||
+		(path[size] != '/' && path[size] != '\0'))
+		return (EACCES);
+	return (ESUCCESS);
+}
+
+int		move_directory(t_user *user, char *path, size_t size)
+{
+	int		err;
+
+	if (chdir(path))
 		return (errno);
-	if (S_ISDIR(sb.st_mode))
-		
+	if (!getcwd(path, size))
+		return (errno);
+	err = check_permission(path, user);
+	if (err)
+		return (err);
+	return (ESUCCESS);
 }
 
 /*
@@ -233,7 +246,6 @@ int		data_send_file(char *file, t_data *data)
 		return (err);
 	if (size == 0)
 	{
-		// What if file is empty ?
 		close(fd);
 		return (ESUCCESS);
 	}
@@ -333,7 +345,7 @@ void		delete_io(t_io *io)
 
 	list_del(&io->list);
 	if (io->data_in.fd != -1)
-		free_data(&io->data_in);
+		free_file(&io->data_in);
 	free(io->input_buffer);
 	while (!list_is_empty(&io->datas_out))
 	{
@@ -514,10 +526,8 @@ bool	recv_data(t_server *server, t_io *io)
 	if (io->data_in.size == io->data_in.size_max)
 	{
 		if (io->data_in.fd != -1)
-		{
-			free_data(&io->data_in);
-			io_input_teardown(io);
-		}
+			free_file(&io->data_in);
+		io_input_teardown(io);
 	}
 	return (true);
 }
@@ -659,23 +669,27 @@ int		request_ls(int argc, char **argv, t_user *user, t_io *io)
 	if (argv[1] == NULL)
 		ft_strncpy(path, user->pwd, PATH_SIZE_MAX);
 	else
-		get_path(user->pwd, argv[1], PATH_SIZE_MAX, path);
+		concat_path(user->pwd, argv[1], path);
 
-	offset = 0;
+	int	err;
+	err = move_directory(user, path, PATH_SIZE_MAX);
+	if (err)
+		return (err);
 
 	LOG_DEBUG("path {%s}", path);
 
 	if ((dp = opendir(path)) == NULL)
 		return (errno);
 
+	offset = 0;
 	while ((ep = readdir(dp)) != NULL)
 	{
 		if (ep->d_name[0] == '.')
 			continue ;
-		offset = concat_safe(buf, offset, sizeof(buf), ep->d_name);
-		offset = concat_safe(buf, offset, sizeof(buf), " ");
+		offset = concat_safe(buf, offset, sizeof(buf) - 1, ep->d_name);
+		offset = concat_safe(buf, offset, sizeof(buf) - 1, " ");
 	}
-	if (offset > 0)
+	if (offset > 0 && offset != sizeof(buf) - 1)
 		offset -= 1;
 
 	buf[offset] = '\0';
@@ -694,10 +708,9 @@ int		request_ls(int argc, char **argv, t_user *user, t_io *io)
 
 int		request_cd(int argc, char **argv, t_user *user, t_io *io)
 {
-	char	*pwd_argv[2];
 	char	path[PATH_SIZE_MAX + 1];
-	char	pwd[PATH_SIZE_MAX + 1];
-	size_t	size;
+	char	*pwd_argv[2];
+	int		err;
 
 	if (argc > 2)
 		return (E2BIG);
@@ -705,20 +718,13 @@ int		request_cd(int argc, char **argv, t_user *user, t_io *io)
 	if (argc == 1)
 		ft_strncpy(path, user->home, PATH_SIZE_MAX);
 	else
-		get_path(user->pwd, argv[1], PATH_SIZE_MAX, path);
+		concat_path(user->pwd, argv[1], path);
 
-	if (chdir(path))
-		return (errno);
+	err = move_directory(user, path, PATH_SIZE_MAX);
+	if (err)
+		return (err);
 
-	if (!getcwd(pwd, PATH_SIZE_MAX))
-		return (errno);
-
-	size = ft_strlen(user->home);
-	if (ft_memcmp(pwd, user->home, size) ||
-		(pwd[size] != '/' && pwd[size] != '\0'))
-		return (EPERM);
-
-	ft_strncpy(user->pwd, pwd, PATH_SIZE_MAX);
+	ft_strncpy(user->pwd, path, PATH_SIZE_MAX);
 
 	pwd_argv[0] = "PWD";
 	pwd_argv[1] = NULL;
@@ -735,10 +741,12 @@ int		request_get(int argc, char **argv, t_user *user, t_io *io)
 
 	if (argc != 2)
 		return (EARGS);
+	if (ft_strchr(argv[1], '/'))
+		return (EINVAL);
+	concat_path(user->pwd, argv[1], path);
 	file = alloc_data();
 	if (!file)
 		return (errno);
-	get_path(user->pwd, argv[1], PATH_SIZE_MAX, path);
 	err = data_send_file(path, file);
 	if (err)
 	{
@@ -772,13 +780,14 @@ int		request_put(int argc, char **argv, t_user *user, t_io *io)
 	int		size;
 	int		err;
 
-	(void)user;
 	if (argc != 3)
 		return (EARGS);
 	size = ft_atoi(argv[2]);
 	if (size < 0)
 		return (EINVAL);
-	get_path(user->pwd, argv[1], PATH_SIZE_MAX, path);
+	if (ft_strchr(argv[1], '/'))
+		return (EINVAL);
+	concat_path(user->pwd, argv[1], path);
 	err = data_recv_file(path, size, &io->data_in);
 	if (err)
 		return (err);
