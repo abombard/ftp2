@@ -14,7 +14,7 @@ LIBFT=$(LIBFT_DIR)/libft.a
 PRINTF=$(PRINTF_DIR)/libprintf.a
 LIST=$(LIST_DIR)/liblist.a
 
-LIBS=-L $(LIBFT_DIR) -lft -L $(LIST_DIR) -llist -L $(PRINTF_DIR) -lprintf
+LIBS=-L $(PRINTF_DIR) -lprintf -L $(LIBFT_DIR) -lft -L $(LIST_DIR) -llist
 
 SRC_DIR=./
 INCLUDES=-I ./includes -I $(LIBFT_DIR) -I $(LIST_DIR) -I $(PRINTF_DIR)
@@ -27,10 +27,10 @@ listen_socket.c\
 log.c\
 sock.c\
 strerror.c\
-fifo.c\
+move_directory.c\
+concat.c\
 data.c\
-user.c\
-set.c\
+msg.c\
 
 OBJ=$(addprefix $(BUILD_DIR)/,$(SRC:.c=.o))
 
@@ -64,3 +64,10 @@ fclean: clean
 re: fclean all
 
 test: $(NAME)
+
+# Make a highlight file for types.  Requires Exuberant ctags and awk
+types: types.vim
+types.vim: *.[ch] $(LIBS_DIR)/*/*.[h]
+		ctags --c-kinds=gstu -o- *.[ch] |\
+				awk 'BEGIN{printf("syntax keyword Type\t")}\
+						{printf("%s ", $$1)}END{print ""}' > $@

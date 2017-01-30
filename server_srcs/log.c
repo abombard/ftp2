@@ -3,7 +3,7 @@
 #include <stdarg.h>			/* va_start(), va_end() */
 #include <stdio.h>			/* snprintf(), vsnprintf() */
 
-bool	write_data (const int fd, const char *cmd, const size_t size)
+int		write_data (const int fd, const char *cmd, const unsigned int size)
 {
 	size_t	written;
 	ssize_t	nwritten;
@@ -15,11 +15,11 @@ bool	write_data (const int fd, const char *cmd, const size_t size)
 		if (nwritten < 0)
 		{
 			perror ("write");
-			return ( false );
+			return ( 0 );
 		}
 		written += (size_t)nwritten;
 	}
-	return ( true );
+	return ( (int)written );
 }
 
 void	private_log(const char *file,

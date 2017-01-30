@@ -1,4 +1,5 @@
 #include "strerror.h"
+#include "printf.h"
 
 #ifdef __LINUX__
 static char *err_str[] = {
@@ -247,3 +248,9 @@ char	*strerror(int err_num)
 		return ((void *)0);
 	return (err_str[err_num]);
 }
+
+void	perror(char *s, int err)
+{
+	ft_fprintf(2, "%s: %s\n", s, strerror(err));
+}
+

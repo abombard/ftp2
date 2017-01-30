@@ -1,435 +1,636 @@
 #include "server.h"
+#include "log.h"
 #include "libft.h"
 #include "strerror.h"
+#include "printf.h"
 
-#include <string.h>
+#include <sys/socket.h>
+#include <stdlib.h>
 
-static volatile bool	run = false;
+/*
+** user
+*/
+t_user	*get_user(int sock, t_server *server)
+{
+	if (sock < 0 || (unsigned long)sock >= sizeof(server->user_array) / sizeof(server->user_array[0]))
+		return (NULL);
+	return (&server->user_array[sock]);
+}
 
+/* //TEMP */
+/*
+** data file
+*/
+#include <fcntl.h>
 #include <sys/stat.h>
-bool	ftp_open(const char *host, const int port, t_ftp *ftp)
+#include <sys/mman.h>
+
+/*
+** recv file
+*/
+int			data_recv_file(char *file, size_t size, t_data *data)
 {
-	char	*home;
+	int		fd;
+	char	*map;
+	int		err;
 
-	if (!fifo_create(sizeof(t_user), USER_COUNT_MAX, &ftp->fifo.users))
-		LOG_FATAL("fifo_create failed on users");
-	if (!fifo_create(MSG_SIZE_MAX + 1, USER_COUNT_MAX * 2, &ftp->fifo.datas))
-		LOG_FATAL("fifo_create failed on datas");
-	sets_teardown(ftp->sets);
-	ftp->home[0] = '\0';
-	ftp->sock_listen = listen_socket(host, port);
-	if (ftp->sock_listen == -1)
-		LOG_FATAL("listen_socket failed");
-	home = getenv("HOME");
-	if (home == NULL)
-		home = "/tmp";
-	ft_strncpy(ftp->home, home, PATH_SIZE_MAX);
-	LOG_DEBUG("fifo->users size %zu", list_size(&ftp->fifo.users));
-	LOG_DEBUG("fifo->datas size %zu", list_size(&ftp->fifo.datas));
-	return (true);
-}
-
-bool	ftp_close(t_ftp *ftp)
-{
-	LOG_DEBUG("fifo->users size %zu", list_size(&ftp->fifo.users));
-	LOG_DEBUG("fifo->datas size %zu", list_size(&ftp->fifo.datas));
-	fifo_destroy(&ftp->fifo.datas);
-	fifo_destroy(&ftp->fifo.users);
-	socket_close(ftp->sock_listen);
-	return (true);
-}
-
-int		accept_connection(int sock_listen)
-{
-	int					sock;
-	socklen_t			addr_size;
-	struct sockaddr_in	addr;
-
-	addr_size = sizeof (addr);
-	sock = accept(sock_listen, (struct sockaddr *)&addr, &addr_size);
-	if (sock == -1)
-	{
-		LOG_ERROR("accept: %s", strerror(errno));
-		return (-1);
-	}
-	if (addr_size > sizeof (addr))
-	{
-		LOG_ERROR("addr_size %zu sizeof(addr) %zu", (size_t)addr_size, (size_t)sizeof(addr));
-		close(sock);
-		return (-1);
-	}
-	return (sock);
-}
-
-bool	new_connection(t_ftp *ftp)
-{
-	t_user	*user;
-	int		sock;
-	ssize_t	size;
-
-	sock = accept_connection(ftp->sock_listen);
-	if (sock == -1)
-		return (false);
-	user = user_new(&ftp->fifo);
-	if (user == NULL)
-	{
-		size = send(sock, MSG(FTP_ERROR " Too many connections\n"), MSG_DONTWAIT);
-		if (size == -1)
-			LOG_ERROR("send: %s", strerror(errno));
-		socket_close(sock);
-		return (false);
-	}
-	user->sock = sock;
-	ft_strncpy(user->home, ftp->home, PATH_SIZE_MAX);
-	ft_strncpy(user->pwd, ftp->home, PATH_SIZE_MAX);
-	data_success(&user->data);
-	fifo_store(&user->data, &ftp->sets[WFDS].datas);
-	return (true);
-}
-
-bool	request_user(int argc, char **argv, t_ftp *ftp, t_user *user)
-{
-	(void)ftp;
-	if (argc > 2)
-	{
-		data_errno(EARGS, &user->data);
-		return (false);
-	}
-	if (argc == 1)
-	{
-		if (strlen(user->name) == 0)
-		{
-			data_update(MSG("User did not registered"), &user->data);
-			return (false);
-		}
-		data_update(user->name, strlen(user->name), &user->data);
-	}
-	else if (argc == 2)
-	{
-		ft_strncpy(user->name, argv[1], USER_NAME_SIZE_MAX);
-	}
-	return (true);
-}
-
-bool	request_quit(int argc, char **argv, t_ftp *ftp, t_user *user)
-{
-	(void)ftp;
-	(void)argv;
-	if (argc > 1)
-	{
-		data_errno(EARGS, &user->data);
-		return (false);
-	}
-	send(user->sock, MSG(FTP_SUCCESS "\n"), MSG_DONTWAIT);
-	user->used = false;
-	return (true);
-}
-
-#include <sys/utsname.h>	/* uname() */
-bool	request_syst(int argc, char **argv, t_ftp *ftp, t_user *user)
-{
-	struct utsname	buf;
-
-	(void)ftp;
-	(void)argv;
-	if (argc > 1)
-	{
-		data_errno(EARGS, &user->data);
-		return (false);
-	}
-	if (uname(&buf))
-	{
-		data_errno(errno, &user->data);
-		return (false);
-	}
-	data_update(buf.sysname, strlen(buf.sysname), &user->data);
-	data_update(" ", sizeof(" ") - 1, &user->data);
-	data_update(buf.release, strlen(buf.release), &user->data);
-	return (true);
-}
-
-bool	request_pwd(int argc, char **argv, t_ftp *ftp, t_user *user)
-{
-	(void)ftp;
-	(void)argv;
-	if (argc > 1)
-	{
-		data_errno(EARGS, &user->data);
-		return (false);
-	}
-	data_update(user->pwd, strlen(user->pwd), &user->data);
-	return (true);
-}
-
-void	get_path(char *pwd, char *in_path, size_t size_max, char *path)
-{
-	if (in_path[0] == '/')
-	{
-		ft_strncpy(path, in_path, size_max);
-	}
-	else
-	{
-		ft_strncpy(path, pwd, size_max);
-		ft_strncat(path, "/", size_max);
-		ft_strncat(path, in_path, size_max);
-	}
-}
-
-#include <dirent.h>
-bool	request_ls(int argc, char **argv, t_ftp *ftp, t_user *user)
-{
-	DIR				*dp;
-	struct dirent	*ep;
-	char			path[PATH_SIZE_MAX + 1];
-
-	(void)ftp;
-	if (argc > 2)
-	{
-		data_errno(EARGS, &user->data);
-		return (false);
-	}
-
-	if (argv[1] == NULL)
-		ft_strncpy(path, user->pwd, PATH_SIZE_MAX);
-	else
-		get_path(user->pwd, argv[1], PATH_SIZE_MAX, path);
-
-	if ((dp = opendir(path)) == NULL)
-	{
-		data_errno(errno, &user->data);
-		return (false);
-	}
-
-	while ((ep = readdir(dp)) != NULL)
-	{
-		if (ep->d_name[0] == '.')
-			continue ;
-		data_update(ep->d_name, strlen(ep->d_name), &user->data);
-		data_update(MSG(" "), &user->data);
-	}
-	if (user->data.size > 0)
-		user->data.size -= sizeof (" ") - 1;
-
-	if (closedir(dp) == -1)
-	{
-		data_errno(errno, &user->data);
-		return (false);
-	}
-
-	return (true);
-}
-
-bool	request_cd(int argc, char **argv, t_ftp *ftp, t_user *user)
-{
-	char	*pwd_argv[2];
-	char	path[PATH_SIZE_MAX + 1];
-
-	(void)ftp;
-	if (argc > 2)
-	{
-		data_errno(EARGS, &user->data);
-		return (false);
-	}
-
-	if (argc == 1)
-		ft_strncpy(path, user->home, PATH_SIZE_MAX);
-	else
-		get_path(user->pwd, argv[1], PATH_SIZE_MAX, path);
-
-	if (chdir(path))
-	{
-		data_errno(errno, &user->data);
-		return (false);
-	}
-
-	if (!getcwd(user->pwd, PATH_SIZE_MAX))
-	{
-		data_errno(errno, &user->data);
-		return (false);
-	}
-
-	pwd_argv[0] = "PWD";
-	pwd_argv[1] = NULL;
-	return (request_pwd(ftp, user, 1, pwd_argv));
-}
-
-# include <fcntl.h>
-# include <sys/stat.h>
-# include <sys/mman.h>
-bool	open_file_for_reading(char *file, t_ftp *ftp, t_user *user, t_data *data)
-{
-	char		path[PATH_SIZE_MAX + 1];
-	int			fd;
-	struct stat	sb;
-	char		*map;
-
-	get_path(user->pwd, file, PATH_SIZE_MAX, path);
-	LOG_DEBUG("open {%s} for reading", path);
-
-	fd = open(path, O_RDONLY);
+	LOG_DEBUG("recv_file {%s} size %zu", file, size);
+	fd = open(file, O_CREAT | O_EXCL | O_RDWR, 0644);
 	if (fd == -1)
-	{
-		data_errno(errno, data);
-		return (false);
-	}
-	if (fstat(fd, &sb))
-	{
-		data_errno(errno, data);
-		close(fd);
-		return (false);
-	}
-	if (!S_ISREG(sb.st_mode))
+		return (errno);
+	if (size == 0)
 	{
 		close(fd);
-		data_update(MSG("Not a regular file"), data);
-		return (false);
+		return (ESUCCESS);
 	}
-	if (sb.st_size == 0)
+
+	if (ftruncate(fd, size))
 	{
+		err = errno;
 		close(fd);
-		return (true);
-	}
-
-	map = mmap(0, (size_t)sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-	if (map == MAP_FAILED)
-	{
-		data_errno(errno, data);
-		close(fd);
-		return (false);
-	}
-
-	fifo_store(data->bytes, &ftp->fifo.datas);
-
-	data->fd = fd;
-	data->bytes = map;
-	data->offset = 0;
-	data->size = (size_t)sb.st_size;
-	data->size_max = (size_t)sb.st_size;
-
-	return (true);
-}
-
-bool	open_file_for_writing(char *file, size_t size, t_user *user, t_data *data)
-{
-	char		path[PATH_SIZE_MAX + 1];
-	int			fd;
-	char		*map;
-
-	get_path(user->pwd, file, PATH_SIZE_MAX, path);
-	LOG_DEBUG("open {%s} for writing", path);
-
-	fd = open(path, O_CREAT | O_TRUNC | O_RDWR, 0777);
-	if (fd == -1)
-	{
-		data_errno(errno, data);
-		return (false);
-	}
-
-	if (ftruncate(fd, (off_t)size))
-	{
-		data_errno(errno, data);
-		close(fd);
-		return (false);
+		return (err);
 	}
 
 	map = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (map == MAP_FAILED)
 	{
-		data_errno(errno, data);
+		err = errno;
 		close(fd);
-		return (false);
+		return (err);
 	}
-
 	data->fd = fd;
 	data->bytes = map;
 	data->offset = 0;
 	data->size = 0;
 	data->size_max = size;
-
-	return (true);
+	return (ESUCCESS);
 }
 
-void	close_file(t_data *data)
+/*
+** send file
+*/
+int		get_file_size(int fd, size_t *size)
 {
-	LOG_DEBUG("close file");
-	if (munmap(data->bytes, data->size) == -1)
-		LOG_ERROR("munmap: %s", strerror(errno));
-	close(data->fd);
-	data_teardown(data);
+	struct stat	sb;
+
+	if (fstat(fd, &sb))
+		return (errno);
+	if (!S_ISREG(sb.st_mode))
+		return (EFTYPE);
+	*size = (size_t)sb.st_size;
+	return (ESUCCESS);
 }
 
-# define FILE_SIZE_MAX	64
-bool	request_get(int argc, char **argv, t_ftp *ftp, t_user *user)
+int		data_send_file(char *file, t_data *data)
 {
-	size_t		size;
-	char		size_str[FILE_SIZE_MAX + 1 + (sizeof(FTP_SUCCESS " ") - 1)];
-	size_t		size_str_index;
-	size_t		size_str_size;
+	int		fd;
+	char	*map;
+	size_t	size;
+	int		err;
 
-	if (argc != 2)
+	fd = open(file, O_RDONLY);
+	if (fd == -1)
+		return (errno);
+	err = get_file_size(fd, &size);
+	if (err)
 	{
-		data_errno(EARGS, &user->data);
-		return (false);
+		close(fd);
+		return (err);
 	}
-	ASSERT (open_file_for_reading(argv[1], ftp, user));
-	size = user->data.size;
 	if (size == 0)
 	{
-		size_str_index = 0;
-		size_str_size = sizeof(FTP_SUCCESS " 0\n") - 1;
-		ft_memcpy(size_str, FTP_SUCCESS " 0\n", size_str_size);
+		close(fd);
+		return (ESUCCESS);
 	}
-	else
+
+	map = mmap(0, size, PROT_READ, MAP_PRIVATE, fd, 0);
+	if (map == MAP_FAILED)
 	{
-		size_str_index = FILE_SIZE_MAX;
-		size_str[size_str_index--] = '\n';
-		size_str_size = 1;
-		while (size > 0)
-		{
-			size_str[size_str_index--] = size % 10 + '0';
-			size /= 10;
-			size_str_size++;
-		}
-		size_str_index++;
-		size_str_index -= sizeof(FTP_SUCCESS " ") - 1;
-		size_str_size += sizeof(FTP_SUCCESS " ") - 1;
-		ft_memcpy(size_str + size_str_index,
-				FTP_SUCCESS " ", sizeof(FTP_SUCCESS " ") - 1);
+		err = errno;
+		close(fd);
+		return (err);
 	}
 
-	LOG_DEBUG("file size {%.*s}", (int)size_str_size, size_str + size_str_index);
+	data->fd = fd;
+	data->bytes = map;
+	data->offset = 0;
+	data->size = size;
+	data->size_max = size;
 
-	send(user->sock, size_str + size_str_index, size_str_size, MSG_DONTWAIT);
+	return (ESUCCESS);
+}
+
+/*
+** data free
+*/
+void		free_file(t_data *data)
+{
+	if (munmap(data->bytes, data->size_max))
+		perror("munmap", errno);
+	if (close(data->fd))
+		perror("close", errno);
+}
+
+void		free_data(t_data *data)
+{
+	list_del(&data->list);
+	if (data->fd != -1)
+		free_file(data);
+	free(data);
+}
+
+/*
+** user
+*/
+void		user_init(t_user *user, char *home)
+{
+	user->name[0] = '\0';
+	ft_strncpy(user->home, home, PATH_SIZE_MAX);
+	ft_strncpy(user->pwd, home, PATH_SIZE_MAX);
+}
+
+/*
+** io
+*/
+t_io		*get_io(int sock, t_server *server)
+{
+	if (sock < 0 || (unsigned long)sock >= sizeof(server->io_array) / sizeof(server->io_array[0]))
+		return (NULL);
+	return (&server->io_array[sock]);
+}
+
+void		io_input_teardown(t_io *io)
+{
+	io->data_in.fd = -1;
+	io->data_in.bytes = io->input_buffer;
+	io->data_in.size_max = INPUT_BUFFER_SIZE;
+	io->data_in.size = 0;
+	io->data_in.offset = 0;
+}
+
+#include "sock.h"
+int			create_io(int sock, t_server *server)
+{
+	t_io		*io;
+	t_user		*user;
+
+	io = get_io(sock, server);
+	if (!io)
+		return (EUSERS);
+	clear_data(&io->data_in);
+	io->input_buffer = (char *)malloc(INPUT_BUFFER_SIZE);
+	if (!io->input_buffer)
+		return (errno);
+	io_input_teardown(io);
+	INIT_LIST_HEAD(&io->datas_out);
+	list_add_tail(&io->list, &server->io_list);
+	io->connected = true;
+	user = get_user(sock, server);
+	user_init(user, server->home);
+	return (ESUCCESS);
+}
+
+void		delete_io(t_io *io)
+{
+	t_data		*data;
+	t_list		*pos;
+
+	list_del(&io->list);
+	if (io->data_in.fd != -1)
+		free_file(&io->data_in);
+	free(io->input_buffer);
+	while (!list_is_empty(&io->datas_out))
+	{
+		pos = list_nth(&io->datas_out, 1);
+		data = CONTAINER_OF(pos, t_data, list);
+		free_data(data);
+	}
+	close_socket(io->sock);
+	io->connected = false;
+}
+
+/*
+** sets
+*/
+static void	fds_set(t_list *io_list, fd_set *fds, int *nfds)
+{
+	t_io	*io;
+	t_list	*pos;
+
+	pos = io_list;
+	while ((pos = pos->next) != io_list)
+	{
+		io = CONTAINER_OF(pos, t_io, list);
+		FD_SET(io->sock, &fds[RFDS]);
+		if (!list_is_empty(&io->datas_out))
+			FD_SET(io->sock, &fds[WFDS]);
+		if (io->sock >= *nfds)
+			*nfds = io->sock + 1;
+	}
+}
+
+void		sets_prepare(t_server *server, int *nfds)
+{
+	FD_ZERO(&server->fds[RFDS]);
+	FD_ZERO(&server->fds[WFDS]);
+
+	FD_SET(server->listen, &server->fds[RFDS]);
+	*nfds = server->listen + 1;
+
+	fds_set(&server->io_list, server->fds, nfds);
+}
+
+/*
+** server open
+*/
+#include "listen_socket.h"
+#include "sock.h"
+bool	server_open(char *host, int port, t_server *server)
+{
+	t_io		*io;
+	size_t		i;
+
+	server->host = host;
+	server->port = port;
+	server->listen = listen_socket(host, port);
+	if (server->listen == -1)
+		return (false);
+	INIT_LIST_HEAD(&server->io_list);
+	i = 0;
+	while (i < sizeof(server->io_array) / sizeof(server->io_array[0]))
+	{
+		io = &server->io_array[i];
+		io->connected = false;
+		io->sock = i;
+		INIT_LIST_HEAD(&io->datas_out);
+		i++;
+	}
+
+	char	*home = getenv("HOME");
+	if (!home)
+		home = "/tmp";
+	ft_strncpy(server->home, home, PATH_SIZE_MAX);
+	LOG_DEBUG("home: %s", server->home);
 
 	return (true);
 }
 
-bool	request_put(int argc, char **argv, t_ftp *ftp, t_user *user)
+/*
+** server close
+*/
+bool	server_close(t_server *server)
 {
-	int	size;
+	close_socket(server->listen);
+	return (true);
+}
+
+/*
+** server loop
+*/
+bool		fds_availables(int nfds, t_server *server, int *ready)
+{
+	struct timeval	tv;
+
+	tv.tv_sec = 10;
+	tv.tv_usec = 0;
+
+	*ready = select(
+		nfds,
+		&server->fds[RFDS],
+		&server->fds[WFDS],
+		NULL,
+		&tv
+	);
+	if (*ready == -1)
+	{
+		if (errno != EINTR)
+			return (false);
+	}
+
+	return (true);
+}
+
+bool	handle_new_connections(t_server *server, bool *new_user)
+{
+	int			sock;
+	ssize_t		size;
+	int			errnum;
+	char		*err;
+
+	*new_user = false;
+	if (!FD_ISSET(server->listen, &server->fds[RFDS]))
+		return (true);
+	sock = accept_connection(server->listen);
+	if (sock == -1)
+		return (false);
+	errnum = create_io(sock, server);
+	if (errnum)
+	{
+		err = strerror(errnum);
+		size = send(sock, err, ft_strlen(err), MSG_DONTWAIT);
+		if (size == -1)
+			perror("send", errno);
+		close_socket(sock);
+		return (false);
+	}
+	LOG_DEBUG("new user connected");
+	*new_user = true;
+	return (true);
+}
+
+bool	int_recv_data(int sock, t_data *data)
+{
+	data->nbytes = recv(sock, data->bytes + data->size, data->size_max - data->size, MSG_DONTWAIT);
+	if (data->nbytes < 0)
+	{
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
+			return (true);
+		perror("recv", errno);
+		return (false);
+	}
+	if (data->nbytes == 0)
+		return (false);
+	data->size += (size_t)data->nbytes;
+	return (true);
+}
+
+bool	recv_data(t_server *server, t_io *io)
+{
+	if (!FD_ISSET(io->sock, &server->fds[RFDS]))
+		return (true);
+	if (!int_recv_data(io->sock, &io->data_in))
+	{
+		delete_io(io);
+		return (false);
+	}
+	if (io->data_in.size == io->data_in.size_max)
+	{
+		if (io->data_in.fd != -1)
+			free_file(&io->data_in);
+		io_input_teardown(io);
+	}
+	return (true);
+}
+
+bool	int_send_data(int sock, t_data *data)
+{
+	data->nbytes = send(sock, data->bytes + data->offset, data->size - data->offset, MSG_DONTWAIT);
+	if (data->nbytes < 0)
+	{
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
+			return (true);
+		perror("send", errno);
+		return (false);
+	}
+	data->offset += (size_t)data->nbytes;
+	return (true);
+}
+
+bool	send_data(t_server *server, t_io *io)
+{
+	t_data		*data;
+	t_list		*pos;
+	bool		success;
+
+	if (!FD_ISSET(io->sock, &server->fds[WFDS]))
+		return (true);
+	while (!list_is_empty(&io->datas_out))
+	{
+		pos = list_nth(&io->datas_out, 1);
+		data = CONTAINER_OF(pos, t_data, list);
+		success = int_send_data(io->sock, data);
+		if (data->offset != data->size)
+			break ;
+		free_data(data);
+	}
+	return (success);
+}
+
+/*
+** treat request
+*/
+int	request_pwd(int argc, char **argv, t_user *user, t_io *io)
+{
+	t_data	*data;
+
+	(void)argv;
+	if (argc > 1)
+		return (E2BIG);
+	data = msg_success(user->pwd);
+	if (!data)
+		return (errno);
+	list_add_tail(&data->list, &io->datas_out);
+	return (ESUCCESS);
+}
+
+int		request_user(int argc, char **argv, t_user *user, t_io *io)
+{
+	t_data	*data;
+
+	data = NULL;
+	if (argc > 2)
+		return (E2BIG);
+	if (argc == 1)
+	{
+		if (ft_strlen(user->name) == 0)
+			return (ENOTREGISTER);
+		data = msg_success(user->name);
+		if (!data)
+			return (errno);
+		list_add_tail(&data->list, &io->datas_out);
+	}
+	else if (argc == 2)
+	{
+		ft_strncpy(user->name, argv[1], NAME_SIZE_MAX);
+		data = msg_success(user->name);
+		if (!data)
+			return (errno);
+		list_add_tail(&data->list, &io->datas_out);
+	}
+	return (ESUCCESS);
+}
+
+int		request_quit(int argc, char **argv, t_user *user, t_io *io)
+{
+	(void)argv;
+	(void)user;
+	if (argc > 1)
+		return (E2BIG);
+	send(io->sock, MSG(SUCCESS "\n"), MSG_DONTWAIT);
+	delete_io(io);
+	return (ESUCCESS);
+}
+
+#include <sys/utsname.h>	/* uname() */
+int		request_syst(int argc, char **argv, t_user *user, t_io *io)
+{
+	t_data			*data;
+	char			buf[128];
+	struct utsname	ubuf;
+
+	(void)argv;
+	(void)user;
+	if (argc > 1)
+		return (E2BIG);
+	if (uname(&ubuf))
+		return (errno);
+	ft_strncpy(buf, ubuf.sysname, sizeof(buf));
+	ft_strncat(buf, " ", sizeof(buf));
+	ft_strncat(buf, ubuf.release, sizeof(buf));
+	data = msg_success(buf);
+	if (!data)
+		return (errno);
+	list_add_tail(&data->list, &io->datas_out);
+	return (ESUCCESS);
+}
+
+#include <dirent.h>
+int		request_ls(int argc, char **argv, t_user *user, t_io *io)
+{
+	DIR				*dp;
+	struct dirent	*ep;
+	char			path[PATH_SIZE_MAX + 1];
+
+	if (argc > 2)
+		return (E2BIG);
+
+	if (argv[1] == NULL)
+		ft_strncpy(path, user->pwd, PATH_SIZE_MAX);
+	else
+		concat_path(user->pwd, argv[1], path);
+
+	int	err;
+	err = move_directory(user, path, PATH_SIZE_MAX);
+	if (err)
+		return (err);
+
+	if ((dp = opendir(path)) == NULL)
+		return (errno);
+
+	char			buf[4096];
+	off_t			offset;
+
+	offset = 0;
+	while ((ep = readdir(dp)) != NULL)
+	{
+		if (ep->d_name[0] == '.')
+			continue ;
+		offset = concat_safe(buf, offset, sizeof(buf) - 1, ep->d_name);
+		offset = concat_safe(buf, offset, sizeof(buf) - 1, " ");
+	}
+	if (offset > 0 && buf[offset - 1] != '$')
+		offset -= 1;
+
+	buf[offset] = '\0';
+
+	closedir(dp);
+
+	t_data		*data;
+
+	data = msg_success(buf);
+	if (!data)
+		return (errno);
+	list_add_tail(&data->list, &io->datas_out);
+
+	return (ESUCCESS);
+}
+
+int		request_cd(int argc, char **argv, t_user *user, t_io *io)
+{
+	char	path[PATH_SIZE_MAX + 1];
+	char	*pwd_argv[2];
+	int		err;
+
+	if (argc > 2)
+		return (E2BIG);
+
+	if (argc == 1)
+		ft_strncpy(path, user->home, PATH_SIZE_MAX);
+	else
+		concat_path(user->pwd, argv[1], path);
+	if ((err = move_directory(user, path, PATH_SIZE_MAX)))
+		return (err);
+	ft_strncpy(user->pwd, path, PATH_SIZE_MAX);
+	pwd_argv[0] = "PWD";
+	pwd_argv[1] = NULL;
+	return (request_pwd(1, pwd_argv, user, io));
+}
+
+int		request_get(int argc, char **argv, t_user *user, t_io *io)
+{
+	t_data		*file;
+	t_data		*file_size;
+	char		*file_size_str;
+	char		path[PATH_SIZE_MAX + 1];
+	int			err;
+
+	if (argc != 2)
+		return (EARGS);
+	if (ft_strchr(argv[1], '/'))
+		return (EINVAL);
+	concat_path(user->pwd, argv[1], path);
+	file = alloc_data();
+	if (!file)
+		return (errno);
+	err = data_send_file(path, file);
+	if (err)
+	{
+		free_data(file);
+		return (err);
+	}
+	file_size_str = ft_itoa(file->size_max);
+	if (!file_size_str)
+	{
+		err = errno;
+		free_data(file);
+		return (err);
+	}
+	file_size = msg_success(file_size_str);
+	if (!file_size)
+	{
+		err = errno;
+		free(file_size_str);
+		free_data(file);
+		return (err);
+	}
+	free(file_size_str);
+	list_add_tail(&file_size->list, &io->datas_out);
+	list_add_tail(&file->list, &io->datas_out);
+	return (ESUCCESS);
+}
+
+int		request_put(int argc, char **argv, t_user *user, t_io *io)
+{
+	t_data	*data;
+	char	path[PATH_SIZE_MAX + 1];
+	int		size;
+	int		err;
 
 	if (argc != 3)
-	{
-		data_errno(EARGS, &user->data);
-		return (false);
-	}
-	size = atoi(argv[2]);
+		return (EARGS);
+	size = ft_atoi(argv[2]);
 	if (size < 0)
-	{
-		data_errno(EINVAL, &user->data);
-		return (false);
-	}
-	ASSERT (open_file_for_writing(argv[1], (size_t)size, ftp, user));
-	return (true);
+		return (EINVAL);
+	if (ft_strchr(argv[1], '/'))
+		return (EINVAL);
+	concat_path(user->pwd, argv[1], path);
+	err = data_recv_file(path, size, &io->data_in);
+	if (err)
+		return (err);
+	data = msg_success("");
+	if (!data)
+		return (errno);
+	list_add_tail(&data->list, &io->datas_out);
+	return (0);
 }
 
 typedef struct	s_request
 {
 	char	*str;
-	bool	(*io_data)(int, char **, t_ftp *, t_user *);
+	int		(*func)(int, char **, t_user *, t_io *);
 }				t_request;
 
-bool	request(int argc, char **argv, t_ftp *ftp, t_data *data)
+int		match_request(int argc, char **argv, t_user *user, t_io *io)
 {
 	static t_request	requests[] = {
 		{ "PWD",  request_pwd },
@@ -443,31 +644,53 @@ bool	request(int argc, char **argv, t_ftp *ftp, t_data *data)
 	};
 	size_t				i;
 
-	data_teardown(data);
 	i = 0;
 	while (i < sizeof(requests) / sizeof(requests[0]))
 	{
-		if (!strcmp(argv[0], requests[i].str))
-			return (requests[i].io_data(argc, argv, ftp, data->user));
+		if (!ft_strcmp(argv[0], requests[i].str))
+			return (requests[i].func(argc, argv, user, io));
 		i++;
 	}
-	data_update(MSG("Invalid request"), data);
-	return (false);
+	return (EBADRQC);
 }
 
-bool	treat_request(int argc, char **argv, t_ftp *ftp, t_data *data)
+bool	treat_request(int ac, char **av, t_user *user, t_io *io)
 {
-	bool	status;
+	t_data	*data;
+	char	*err;
+	int		errnum;
 
-	status = request(argc, argv, ftp, data);
-	if (!status)
-		data_error(data);
-	else if (user->used == true && data->fd == -1)
-		data_success(data);
-	return (status);
+	errnum = match_request(ac, av, user, io);
+	if (errnum)
+	{
+		err = strerror(errnum);
+		if (!err)
+			err = "Undefined error";
+		data = msg_error(err);
+		if (!data)
+			return (false);
+		list_add_tail(&data->list, &io->datas_out);
+	}
+	LOG_DEBUG("user {%s} request treated", user->name);
+	return (true);
 }
 
-static bool	request_split(t_buf *request, char ***argv, int *argc)
+/*
+** get request
+*/
+bool	get_request(t_data *in, t_buf *request)
+{
+	char	*pt;
+
+	pt = ft_memchr(in->bytes, '\n', in->size);
+	if (pt == NULL)
+		return (false);
+	request->bytes = in->bytes;
+	request->size = (size_t)(pt - in->bytes);
+	return (true);
+}
+
+bool	split_request(t_buf *request, int *argc, char ***argv)
 {
 	size_t	i;
 
@@ -479,8 +702,6 @@ static bool	request_split(t_buf *request, char ***argv, int *argc)
 	*argc = 0;
 	while ((*argv)[*argc])
 		(*argc) += 1;
-	if (*argc <= 0)
-		return (false);
 	i = 0;
 	while ((*argv)[0][i])
 	{
@@ -490,188 +711,114 @@ static bool	request_split(t_buf *request, char ***argv, int *argc)
 	return (true);
 }
 
-static bool	request_get(t_data *data, t_buf *request)
+bool	treat_input_data(t_server *server, t_io *io)
 {
-	char	*pt;
+	int			argc;
+	char		**argv;
+	t_user		*user;
+	t_buf		request;
+	bool		status;
 
-	pt = ft_memchr(data->bytes, '\n', data->size);
-	if (pt == NULL)
-	{
-		LOG_DEBUG("data not ready for treatment {%.*s}", (int)data->size, data->bytes);
-		return (false);
-	}
-	request.bytes = data->bytes;
-	request.size = (size_t)(pt - data->bytes);
-	LOG_DEBUG("request {%.*s}", (int)request.size, request.bytes);
-	return (true);
-}
-
-bool	treat_data(t_data *data, t_ftp *ftp, bool isset)
-{
-	t_buf	request;
-	int		ac;
-	char	**av;
-	bool	status;
-
-	(void)isset;
-	if (data->fd != -1)
-	{
-		if (data->offset == data->size)
-		{
-			close_file(data);
-		}
+	if (io->data_in.fd != -1)
 		return (true);
-	}
-	if (!request_get(data, &request))
+	if (!get_request(&io->data_in, &request))
 		return (true);
-	status = request_split(&request, &av, &ac);
-
+	split_request(&request, &argc, &argv);
 	request.size += 1;
-	ft_memmove(data->bytes, data->bytes + request.size, data->size - request.size);
-	data->size -= request.size;
-
-	if (!status)
-		LOG_FATAL("request_split failed");
-
-	status = treat_request(ac, av, data, ftp);
-	ac = 0;
-	while (av[ac])
-		free(av[ac++]);
-	free(av);
+	ft_memmove(io->data_in.bytes, io->data_in.bytes + request.size, io->data_in.size - request.size);
+	io->data_in.size -= request.size;
+	if (!argv)
+		return (false);
+	user = get_user(io->sock, server);
+	status = treat_request(argc, argv, user, io);
+	argc = 0;
+	while (argv[argc])
+		free(argv[argc++]);
+	free(argv);
 	return (status);
 }
 
-bool	recv_data(t_data *data, t_ftp *ftp, bool isset)
+/*
+** server loop
+*/
+void	foreach_io(t_server *server, bool (*io_func)(t_server *, t_io *))
 {
-	ssize_t	size;
+	t_io		*io;
+	t_list		*pos;
+	t_list		*safe;
+	int			nfails;
 
-	if (!isset)
-		return (true);
-	size = recv(data->user->sock, data->bytes + data->size, data->size_max - data->size, MSG_DONTWAIT);
-	if (size < 0)
+	nfails = 0;
+	safe = server->io_list.next;
+	while ((pos = safe) != &server->io_list && (safe = pos->next))
 	{
-		LOG_ERROR("recv: %s", strerror(errno));
+		io = CONTAINER_OF(pos, t_io, list);
+		if (!io_func(server, io))
+			nfails++;
+	}
+}
+
+bool	server_loop(t_server *server)
+{
+	int		nfds;
+	int		ready;
+	bool	new_user;
+
+	sets_prepare(server, &nfds);
+
+	if (!fds_availables(nfds, server, &ready))
 		return (false);
-	}
-	if (size == 0)
-	{
-		LOG_DEBUG("recv returned 0");
+	if (ready == 0)
 		return (true);
-	}
-	LOG_DEBUG("recv {%.*s}", (int)size, data->bytes + data->size);
-	data->size += (size_t)size;
-	return (true);
-}
 
-bool	send_data(t_data *data, t_ftp *ftp, bool isset)
-{
-	if (!isset)
-		return (true);
-	size = send(data->user->sock, data->bytes + data->offset, data->size - data->offset, MSG_DONTWAIT);
-	if (size < 0)
-	{
-		LOG_ERROR("send: %s", strerror(errno));
+	if (!handle_new_connections(server, &new_user))
 		return (false);
-	}
-	LOG_DEBUG("send {%.*s}", (int)size, data->bytes + data->offset);
-	data->offset += (size_t)size;
-	return (true);
-}
+	if (new_user)
+		return (true);
 
-bool	foreach_data(t_set *set, bool (*io_data)(t_data *, t_ftp *, bool), t_ftp *ftp)
-{
-	t_data	*data;
-	t_list	*pos;
-	t_list	*next;
-	bool	isset;
+	foreach_io(server, &send_data);
+	foreach_io(server, &recv_data);
 
-	next = &set->datas.next;
-	while ((pos = next) && pos != &set->datas && (next = pos->next))
-	{
-		data = CONTAINER_OF(pos, t_data, fifo);
-		isset = FD_ISSET(data->sock, &set->fds);
-		ASSERT (io_data(ftp, data, isset));
-	}
-	return (true);
-}
-
-bool	ftp_loop(t_ftp *ftp)
-{
-	int				ready;
-	struct timeval	tv;
-	int				nfds;
-
-	run = true;
-	while (run)
-	{
-		nfds = sets_prepare(ftp->sock_listen, ftp->sets);
-		LOG_DEBUG("nfds %d", nfds);
-
-		tv.tv_sec = 10;
-		tv.tv_usec = 0;
-
-		ready = select(
-			nfds,
-			&ftp->sets[RFDS].fds,
-			&ftp->sets[WFDS].fds,
-			&ftp->sets[EFDS].fds,
-			&tv
-		);
-		if (ready == -1)
-		{
-			if (errno == EINTR)
-				continue ;
-			LOG_FATAL("select: %s", strerror(errno));
-		}
-		if (ready == 0)
-			continue ;
-		LOG_DEBUG("ready %d", ready);
-
-		if (FD_ISSET(ftp->sock_listen, &ftp->sets[RFDS].fds))
-		{
-			new_connection(ftp);
-			ready --;
-		}
-
-		ASSERT (foreach_data(&ftp->sets[RFDS], &recv_data, ftp));
-		ASSERT (foreach_data(&ftp->sets[RFDS], &treat_data, ftp));
-		ASSERT (foreach_data(&ftp->sets[WFDS], &send_data, ftp));
-	}
+	foreach_io(server, &treat_input_data);
 
 	return (true);
 }
 
-void	sighandler(int sig)
-{
-	(void)sig;
-	run = false;
-}
-
+/*
+** main
+*/
+#include <unistd.h>
 int		main(int argc, char **argv)
 {
-	t_ftp	ftp;
-	char	*host;
-	int		port;
-	int		exit_status;
+	t_server	server;
+	char		*host;
+	int			port;
+	int			exit_status;
 
-	signal(SIGINT, sighandler);
 	if (argc != 3)
 	{
-		fprintf(stderr, "Usage: %s host port\n", argv[0]);
-		return (1);
+		ft_fprintf(2, "Usage: %s host port\n", argv[0]);
+		return (EXIT_FAILURE);
 	}
 	host = argv[1];
 	port = ft_atoi(argv[2]);
-	LOG_DEBUG("host {%s} port {%d}", host, port);
-	if (!ftp_open(host, port, &ftp))
+	if (!server_open(host, port, &server))
 	{
-		LOG_ERROR("ftp_open failed host {%s} port {%s}", argv[1], argv[2]);
+		LOG_ERROR("server_open failed host {%s} port {%s}", argv[1], argv[2]);
 		return (EXIT_FAILURE);
 	}
-	exit_status = ftp_loop(&ftp) ? EXIT_SUCCESS : EXIT_FAILURE;
-	if (!ftp_close(&ftp))
+	exit_status = EXIT_SUCCESS;
+	while (1)
 	{
-		LOG_ERROR("ftp_close failed");
+		if (!server_loop(&server))
+		{
+			exit_status = EXIT_FAILURE;
+			break ;
+		}
+	}
+	if (!server_close(&server))
+	{
+		LOG_ERROR("server_close failed");
 		return (EXIT_FAILURE);
 	}
 	return (exit_status);

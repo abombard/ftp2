@@ -1,60 +1,93 @@
 #include "get_next_line.h"
-#include <unistd.h>
-#include <stdio.h>
+#include "libft.h"
+#include "strerror.h"
 
-extern void	gnl_init(t_gnl *s, int fd, char *buf, size_t buf_size)
+#include <sys/types.h>
+#include <stdbool.h>
+#include <stdlib.h>
+
+void		gnl_init(t_gnl *gnl, int fd)
 {
-	s->fd = fd;
-	s->buf = buf;
-	s->buf_size = buf_size;
-	s->size = 0;
-	s->size_left = 0;
+	gnl->fd = fd;
+	gnl->nread = -1;
+	gnl->bytes = NULL;
+	gnl->size = 0;
+	gnl->line_size = 0;
 }
 
-static bool	gnl_read(t_gnl *s)
+static void	flush_line(t_gnl *gnl)
 {
-	ssize_t	nb_read;
-
-	nb_read = read(s->fd, s->buf + s->size_left, s->buf_size - s->size_left);
-	if (nb_read < 0)
-	{
-		perror("read");
-		return (false);
-	}
-	s->size_left += (size_t)nb_read;
-	if (s->size_left == 0)
-		return (false);
-	return (true);
+	ft_memmove(gnl->bytes, gnl->bytes + gnl->line_size, gnl->size - gnl->line_size);
+	gnl->size -= gnl->line_size;
+	gnl->line_size = 0;
 }
 
-extern bool	get_next_line(t_gnl *s, t_buf *line)
+static int	concat(t_gnl *gnl, char *s)
+{
+	char	*new;
+
+	new = (char *)malloc(gnl->size + gnl->nread + 1);
+	if (!new)
+		return (errno);
+	ft_memcpy(new, gnl->bytes, gnl->size);
+	ft_memcpy(new + gnl->size, s, gnl->nread);
+	free(gnl->bytes);
+	gnl->bytes = new;
+	gnl->size += gnl->nread;
+	return (ESUCCESS);
+}
+
+static bool	get_line(t_gnl *gnl, t_buf *line)
 {
 	char	*pt;
 
-	line->bytes = s->buf;
+	line->bytes = NULL;
 	line->size = 0;
-	ft_memmove(s->buf, s->buf + s->size, s->size_left);
-	pt = ft_memchr(s->buf, '\n', s->size_left);
-	if (pt == NULL)
+	pt = ft_memchr(gnl->bytes, '\n', gnl->size);
+	if (pt)
 	{
-		if (!gnl_read(s))
-			return (false);
-		pt = ft_memchr(s->buf, '\n', s->size_left);
-		if (pt == NULL)
+		line->bytes = gnl->bytes;
+		line->size = (size_t)(pt - gnl->bytes);
+		gnl->line_size = line->size + 1;
+	}
+	else if (gnl->nread == 0)
+	{
+		line->bytes = gnl->bytes;
+		line->size = gnl->size;
+		gnl->line_size = gnl->size;
+	}
+	return (line->bytes);
+}
+
+bool		get_next_line(t_gnl *gnl, t_buf *line)
+{
+	char	buf[512];
+	int		err;
+
+	flush_line(gnl);
+	while (!get_line(gnl, line))
+	{
+		gnl->nread = read(gnl->fd, buf, sizeof(buf));
+		if (gnl->nread < 0 || (gnl->nread == 0 && gnl->size == 0))
 		{
-			if (s->size_left == s->buf_size)
-			{
-				ft_fprintf(2, "Line too big\n");
-				return (false);
-			}
-			s->size = s->size_left;
-			s->size_left = 0;
-			line->size = s->size;
-			return (true);
+			free(gnl->bytes);
+			return (false);
+		}
+		err = concat(gnl, buf);
+		if (err)
+		{
+			perror("concat", err);
+			return (false);
 		}
 	}
-	s->size = (size_t)(pt + 1 - s->buf);
-	s->size_left -= s->size;
-	line->size = s->size - 1;
+	return (true);
+}
+
+bool	gnl_flush(t_gnl *gnl, t_buf *buf)
+{
+	flush_line(gnl);
+	buf->bytes = gnl->bytes;
+	buf->size = gnl->size;
+	gnl->line_size = gnl->size;
 	return (true);
 }

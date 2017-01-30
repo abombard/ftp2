@@ -19,5 +19,6 @@
 # endif
 
 char	*strerror(int err_num);
+void	perror(char *s, int err);
 
 #endif

@@ -1,7 +1,10 @@
 #include "strerror.h"
+#include "printf.h"
 
+#ifdef __LINUX__
 static char *err_str[] = {
-	[E2BIG] = "       E2BIG           Argument list too long ",
+	[ESUCCESS] = "SUCCESS",
+	[E2BIG] = "Argument list too long ",
 	[EACCES] = "Permission denied ",
 	[EADDRINUSE] = "Address already in use ",
 	[EADDRNOTAVAIL] = "Address not available ",
@@ -118,12 +121,15 @@ static char *err_str[] = {
 	[EUSERS] = "Too many users",
 	[EXDEV] = "Improper link ",
 	[EXFULL] = "Exchange full",
-	[EARGS] = "Invalid number of arguments"
+	[EARGS] = "Invalid number of arguments",
+	[ENOTREGISTER] = "Not registered",
+	[EFTYPE] = "Inappropriate file type or format"
 };
+#endif
 
-#ifdef MAXOSX
+#ifdef __MACOSX__
 static char *err_str[] = {
-	[0] = "Success",
+	[ESUCCESS] = "Success",
 	[EPERM] = "Operation not permitted",
 	[ENOENT] = "No such file or directory",
 	[ESRCH] = "No such process",
@@ -230,7 +236,9 @@ static char *err_str[] = {
 	[ENOTRECOVERABLE] = "State not recoverable",
 	[EOWNERDEAD] = "Previous owner died",
 	[EQFULL] = "Interface output queue is full",
-	[EARGS] = "Invalid number of arguments"
+	[EARGS] = "Invalid number of arguments",
+	[ENOTREGISTER] = "Not registered",
+	[EBADRQC] = "Invalid request code"
 };
 #endif
 
@@ -240,3 +248,9 @@ char	*strerror(int err_num)
 		return ((void *)0);
 	return (err_str[err_num]);
 }
+
+void	perror(char *s, int err)
+{
+	ft_fprintf(2, "%s: %s\n", s, strerror(err));
+}
+
