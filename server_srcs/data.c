@@ -1,6 +1,7 @@
 #include "server.h"
 #include "strerror.h"
 #include <stdlib.h>
+#include <sys/mman.h>
 
 extern void		clear_data(t_data *data)
 {
@@ -12,25 +13,11 @@ extern void		clear_data(t_data *data)
 	data->size_max = 0;
 }
 
-extern t_data	*alloc_data(void)
+extern t_data	*alloc_data(size_t size)
 {
 	t_data	*data;
 
-	data = (t_data *)malloc(sizeof(t_data));
-	if (!data)
-	{
-		perror("malloc", errno);
-		return (NULL);
-	}
-	clear_data(data);
-	return (data);
-}
-
-extern t_data	*alloc_data_msg(size_t size)
-{
-	t_data	*data;
-
-	data = malloc(sizeof(t_data) + size + 1);
+	data = malloc(sizeof(t_data) + size);
 	if (!data)
 	{
 		perror("malloc", errno);
@@ -38,7 +25,22 @@ extern t_data	*alloc_data_msg(size_t size)
 	}
 	clear_data(data);
 	data->bytes = (void *)data + sizeof(t_data);
-	data->size_max = size;
+	data->size_max = size - 1;
 	return (data);
 }
 
+extern void	free_file(t_data *data)
+{
+	if (munmap(data->bytes, data->size_max))
+		perror("munmap", errno);
+	if (close(data->fd))
+		perror("close", errno);
+}
+
+extern void	free_data(t_data *data)
+{
+	list_del(&data->list);
+	if (data->fd != -1)
+		free_file(data);
+	free(data);
+}

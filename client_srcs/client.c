@@ -217,7 +217,6 @@ static int	server_accept_transfer(t_gnl *gnl_sock, t_buf *msg, bool *ok)
 int		send_file(const int sock, t_gnl *gnl_sock, char **argv)
 {
 	int		fd;
-	char	*addr;
 	size_t	size;
 	int		err;
 
@@ -241,11 +240,30 @@ int		send_file(const int sock, t_gnl *gnl_sock, char **argv)
 		return (err);
 	}
 
+	t_buf	msg;
+	bool	ok;
+
+	err = server_accept_transfer(gnl_sock, &msg, &ok);
+	if (err)
+	{
+		close(fd);
+		return (err);
+	}
+
+	if (!ok)
+	{
+		write_data(1, msg.bytes, msg.size);
+		close(fd);
+		return (0);
+	}
+
 	if (size == 0)
 	{
 		close(fd);
 		return (0);
 	}
+
+	char	*addr;
 
 	addr = mmap(0, size, PROT_READ, MAP_PRIVATE, fd, 0);
 	if (addr == MAP_FAILED)
@@ -255,16 +273,7 @@ int		send_file(const int sock, t_gnl *gnl_sock, char **argv)
 		return (err);
 	}
 
-	t_buf	msg;
-	bool	ok;
-	err = server_accept_transfer(gnl_sock, &msg, &ok);
-	if (!err)
-	{
-		if (ok)
-			err = send_msg(sock, addr, size);
-		else
-			write_data(1, msg.bytes, msg.size);
-	}
+	err = send_msg(sock, addr, size);
 
 	munmap(addr, size);
 	close(fd);
@@ -307,10 +316,6 @@ int		recv_file(const int sock, t_gnl *gnl_sock, char **argv, t_buf *cmd)
 	if (argv[1] == NULL)
 		return (EINVAL);
 
-	fd = open(argv[1], O_CREAT | O_EXCL | O_RDWR, 0777);
-	if (fd == -1)
-		return (errno);
-
 	int		err;
 
 	err = send_msg(sock, cmd->bytes, cmd->size + 1);
@@ -322,17 +327,17 @@ int		recv_file(const int sock, t_gnl *gnl_sock, char **argv, t_buf *cmd)
 
 	err = server_accept_transfer(gnl_sock, &msg, &ok);
 	if (err)
-	{
-		close(fd);
 		return (err);
-	}
 	if (!ok)
 	{
 		write_data(1, msg.bytes, msg.size);
 		write_data(1, "\n", sizeof("\n") - 1);
-		close(fd);
 		return (0);
 	}
+
+	fd = open(argv[1], O_CREAT | O_EXCL | O_RDWR, 0777);
+	if (fd == -1)
+		return (errno);
 
 	err = get_file_size(&msg, &size);
 	if (err)

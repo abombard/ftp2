@@ -3,6 +3,7 @@ FLAGS=
 FLAGS42=-Wall -Wextra -Werror
 
 NAME=client
+DEBUG=debug
 
 LIBS_DIR=../libs
 
@@ -51,11 +52,16 @@ $(NAME):$(LIBFT) $(PRINTF) $(LIST) $(OBJ)
 	@$(CC) $(FLAGS42) $(OBJ) $(LIBS) -o $@
 	@echo "$@ was created"
 
+$(DEBUG):$(LIBFT) $(PRINTF) $(LIST) $(OBJ)
+	@$(CC) -d $(FLAGS42) $(OBJ) $(LIBS) -o $@
+	@echo "$@ was created"
+
 clean:
 	@rm -rf $(BUILD_DIR)
 
 fclean: clean
 	@rm -f $(NAME)
+	@rm -f $(DEBUG)
 
 re: fclean all
 

@@ -65,14 +65,14 @@ int		accept_connection(int listen_socket)
 	socklen_t			addr_size;
 	struct sockaddr_in	addr;
 
-	addr_size = sizeof (addr);
+	addr_size = sizeof(addr);
 	sock = accept(listen_socket, (struct sockaddr *)&addr, &addr_size);
 	if (sock == -1)
 	{
 		perror("accept", errno);
 		return (-1);
 	}
-	if (addr_size > sizeof (addr))
+	if (addr_size > sizeof(addr))
 	{
 		LOG_ERROR("addr_size %zu sizeof(addr) %zu", (size_t)addr_size, (size_t)sizeof(addr));
 		close(sock);

@@ -6,16 +6,15 @@ static t_data	*msg_create(char *status, char *msg)
 	t_data	*data;
 	size_t	size;
 
-	size = ft_strlen(status) + sizeof(" ") - 1 + ft_strlen(msg) + 1;
-	data = alloc_data_msg(size);
+	size = ft_strlen(status) + sizeof(" ") - 1 + ft_strlen(msg);
+	data = alloc_data(size + sizeof("\n") - 1);
 	if (!data)
 		return (NULL);
 	ft_strncpy(data->bytes, status, data->size_max);
 	ft_strncat(data->bytes, " ", data->size_max);
 	ft_strncat(data->bytes, msg, data->size_max);
-	data->size = size;
-	data->bytes[data->size] = '\n';
-	data->size += 1;
+	data->bytes[size] = '\n';
+	data->size = size + 1;
 	return (data);
 }
 

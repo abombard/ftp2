@@ -22,15 +22,35 @@ INCLUDES=-I ./includes -I $(LIBFT_DIR) -I $(LIST_DIR) -I $(PRINTF_DIR)
 BUILD_DIR=__build
 
 SRC=\
-server.c\
+main.c\
+server_open.c\
+server_loop.c\
+server_close.c\
 listen_socket.c\
-log.c\
 sock.c\
+new_connection.c\
+log.c\
 strerror.c\
+data.c\
+read_data.c\
+send_data.c\
+msg.c\
+file_create.c\
+file_load.c\
+io.c\
+sets.c\
+user.c\
 move_directory.c\
 concat.c\
-data.c\
-msg.c\
+request.c\
+request_pwd.c\
+request_user.c\
+request_quit.c\
+request_syst.c\
+request_ls.c\
+request_cd.c\
+request_get.c\
+request_put.c\
 
 OBJ=$(addprefix $(BUILD_DIR)/,$(SRC:.c=.o))
 

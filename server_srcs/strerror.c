@@ -121,7 +121,6 @@ static char *err_str[] = {
 	[EUSERS] = "Too many users",
 	[EXDEV] = "Improper link ",
 	[EXFULL] = "Exchange full",
-	[EARGS] = "Invalid number of arguments",
 	[ENOTREGISTER] = "Not registered",
 	[EFTYPE] = "Inappropriate file type or format"
 };
@@ -236,7 +235,6 @@ static char *err_str[] = {
 	[ENOTRECOVERABLE] = "State not recoverable",
 	[EOWNERDEAD] = "Previous owner died",
 	[EQFULL] = "Interface output queue is full",
-	[EARGS] = "Invalid number of arguments",
 	[ENOTREGISTER] = "Not registered",
 	[EBADRQC] = "Invalid request code"
 };
