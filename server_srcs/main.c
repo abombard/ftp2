@@ -1,8 +1,8 @@
 #include "server.h"
-#include "log.h"
 #include "libft.h"
 #include "printf.h"
 #include <stdlib.h>
+#include <unistd.h>
 
 static char	*sgetenv(char **environ, char *search)
 {
@@ -26,10 +26,35 @@ static char	*sgetenv(char **environ, char *search)
 	return (NULL);
 }
 
-#include <unistd.h>
-int		main(int argc, char **argv, char **environ)
+static bool	server(char *host, int port, char *home)
 {
 	t_server	server;
+	bool		success;
+
+	if (!server_open(host, port, home, &server))
+	{
+		ft_fprintf(2, "server_open failed\n");
+		return (false);
+	}
+	success = true;
+	while (success)
+	{
+		if (!server_loop(&server))
+		{
+			success = false;
+			break ;
+		}
+	}
+	if (!server_close(&server))
+	{
+		ft_fprintf(2, "server_close failed\n");
+		return (false);
+	}
+	return (success);
+}
+
+int			main(int argc, char **argv, char **environ)
+{
 	char		*host;
 	int			port;
 	char		*home;
@@ -43,24 +68,6 @@ int		main(int argc, char **argv, char **environ)
 	host = argv[1];
 	port = ft_atoi(argv[2]);
 	home = sgetenv(environ, "HOME");
-	if (!server_open(host, port, home, &server))
-	{
-		LOG_ERROR("server_open failed host {%s} port {%s}", argv[1], argv[2]);
-		return (EXIT_FAILURE);
-	}
-	exit_status = EXIT_SUCCESS;
-	while (1)
-	{
-		if (!server_loop(&server))
-		{
-			exit_status = EXIT_FAILURE;
-			break ;
-		}
-	}
-	if (!server_close(&server))
-	{
-		LOG_ERROR("server_close failed");
-		return (EXIT_FAILURE);
-	}
+	exit_status = server(host, port, home) ? EXIT_SUCCESS : EXIT_FAILURE;
 	return (exit_status);
 }

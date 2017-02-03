@@ -1,12 +1,12 @@
 #include "sock.h"
 #include "strerror.h"
 #include "libft.h"
-#include "log.h"
+#include "printf.h"
 
 #include <sys/socket.h>
 #include <netdb.h>
 #include <stdbool.h>
-#include <string.h>		/* memset() */
+#include <string.h>
 
 static bool		addrinfo_alloc(const char *host, struct addrinfo **out_result)
 {
@@ -16,14 +16,14 @@ static bool		addrinfo_alloc(const char *host, struct addrinfo **out_result)
 
 	*out_result = NULL;
 	ft_memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;			/* Allow IPv4 or IPv6 */
-	hints.ai_socktype = SOCK_STREAM;		/* Stream socket */
-	hints.ai_flags = AI_PASSIVE;			/* For wildcard IP address */
-	hints.ai_protocol = 0;					/* Any protocol */
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE;
+	hints.ai_protocol = 0;
 	err = getaddrinfo(host, "ftp", &hints, &result);
 	if (err)
 	{
-		LOG_ERROR("getaddrinfo: %s", gai_strerror(err));
+		ft_fprintf(2, "getaddrinfo: %s\n", gai_strerror(err));
 		return (false);
 	}
 	*out_result = result;
@@ -31,7 +31,8 @@ static bool		addrinfo_alloc(const char *host, struct addrinfo **out_result)
 }
 
 #define SOCKET_BACKLOG_COUNT_MAX	1
-static int	sock_bind(const int sock, const int port)
+
+static int		sock_bind(const int sock, const int port)
 {
 	struct sockaddr_in	sockaddr;
 	int					yes;
@@ -39,18 +40,17 @@ static int	sock_bind(const int sock, const int port)
 	yes = 1;
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1)
 		return (errno);
-	ft_memset(&sockaddr, 0, sizeof (sockaddr));
+	ft_memset(&sockaddr, 0, sizeof(sockaddr));
 	sockaddr.sin_port = htons(port);
 	sockaddr.sin_family = AF_INET;
 	if (bind(sock, (struct sockaddr *)&sockaddr, sizeof(sockaddr)) == -1)
 		return (errno);
-	LOG_DEBUG("accepting connections on port %d\n", port);
 	if (listen(sock, SOCKET_BACKLOG_COUNT_MAX))
 		return (errno);
 	return (ESUCCESS);
 }
 
-int			listen_socket(const char *host, const int port)
+extern int		listen_socket(const char *host, const int port)
 {
 	struct addrinfo *result;
 	int				sock;
@@ -59,10 +59,7 @@ int			listen_socket(const char *host, const int port)
 
 	sock = -1;
 	if (!addrinfo_alloc(host, &result))
-	{
-		LOG_ERROR("addrinfo_alloc_init failed");
 		return (-1);
-	}
 	rp = result;
 	while (rp != NULL)
 	{

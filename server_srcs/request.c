@@ -7,14 +7,14 @@
 static int	match_request(int argc, char **argv, t_user *user, t_io *io)
 {
 	static t_request	requests[] = {
-		{ "PWD",  request_pwd },
+		{ "PWD", request_pwd },
 		{ "USER", request_user },
 		{ "QUIT", request_quit },
 		{ "SYST", request_syst },
-		{ "LS",   request_ls },
-		{ "CD",   request_cd },
-		{ "GET",  request_get },
-		{ "PUT",  request_put }
+		{ "LS", request_ls },
+		{ "CD", request_cd },
+		{ "GET", request_get },
+		{ "PUT", request_put }
 	};
 	size_t				i;
 
@@ -95,7 +95,8 @@ extern bool	request(t_server *server, t_io *io)
 		return (true);
 	split_request(&request, &argc, &argv);
 	request.size += 1;
-	ft_memmove(io->data_in.bytes, io->data_in.bytes + request.size, io->data_in.size - request.size);
+	ft_memmove(io->data_in.bytes, io->data_in.bytes + request.size,
+			io->data_in.size - request.size);
 	io->data_in.size -= request.size;
 	if (!argv)
 		return (false);

@@ -26,4 +26,3 @@ extern int		request_put(int argc, char **argv, t_user *user, t_io *io)
 	list_add_tail(&data->list, &io->datas_out);
 	return (0);
 }
-

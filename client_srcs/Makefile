@@ -26,8 +26,19 @@ SRC=\
 log.c\
 strerror.c\
 get_next_line.c\
+get_next_line_utils.c\
 sock.c\
 client.c\
+send_msg.c\
+free_strarray.c\
+write_data.c\
+split_cmd.c\
+local_command.c\
+isfiletransfer.c\
+init_file_transfer.c\
+server_accept_file_transfer.c\
+send_file.c\
+recv_file.c\
 
 OBJ=$(addprefix $(BUILD_DIR)/,$(SRC:.c=.o))
 

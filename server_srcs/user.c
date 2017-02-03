@@ -3,7 +3,8 @@
 
 extern t_user	*get_user(int sock, t_server *server)
 {
-	if (sock < 0 || (unsigned long)sock >= sizeof(server->user_array) / sizeof(server->user_array[0]))
+	if (sock < 0 ||
+(size_t)sock >= sizeof(server->user_array) / sizeof(server->user_array[0]))
 		return (NULL);
 	return (&server->user_array[sock]);
 }

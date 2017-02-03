@@ -5,7 +5,8 @@
 
 extern t_io		*get_io(int sock, t_server *server)
 {
-	if (sock < 0 || (unsigned long)sock >= sizeof(server->io_array) / sizeof(server->io_array[0]))
+	if (sock < 0 ||
+(unsigned long)sock >= sizeof(server->io_array) / sizeof(server->io_array[0]))
 		return (NULL);
 	return (&server->io_array[sock]);
 }
@@ -59,7 +60,7 @@ extern void		delete_io(t_io *io)
 	io->connected = false;
 }
 
-extern void	foreach_io(t_server *server, bool (*io_func)(t_server *, t_io *))
+extern void		foreach_io(t_server *server, bool (*func)(t_server *, t_io *))
 {
 	t_io		*io;
 	t_list		*pos;
@@ -68,10 +69,11 @@ extern void	foreach_io(t_server *server, bool (*io_func)(t_server *, t_io *))
 
 	nfails = 0;
 	safe = server->io_list.next;
-	while ((pos = safe) != &server->io_list && (safe = pos->next))
+	while ((pos = safe) != &server->io_list)
 	{
+		safe = pos->next;
 		io = CONTAINER_OF(pos, t_io, list);
-		if (!io_func(server, io))
+		if (!func(server, io))
 			nfails++;
 	}
 }

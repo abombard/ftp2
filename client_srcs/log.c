@@ -3,25 +3,6 @@
 #include <stdarg.h>			/* va_start(), va_end() */
 #include <stdio.h>			/* snprintf(), vsnprintf() */
 
-int		write_data (const int fd, const char *cmd, const unsigned int size)
-{
-	size_t	written;
-	ssize_t	nwritten;
-
-	written = 0;
-	while (written < size)
-	{
-		nwritten = write (fd, cmd + written, size - written);
-		if (nwritten < 0)
-		{
-			perror ("write");
-			return ( 0 );
-		}
-		written += (size_t)nwritten;
-	}
-	return ( (int)written );
-}
-
 void	private_log(const char *file,
 					const char *func,
 					const int line,

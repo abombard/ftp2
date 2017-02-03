@@ -2,7 +2,8 @@
 #include "printf.h"
 
 #ifdef __LINUX__
-static char *err_str[] = {
+
+static char *g_err_str[] = {
 	[ESUCCESS] = "SUCCESS",
 	[E2BIG] = "Argument list too long ",
 	[EACCES] = "Permission denied ",
@@ -128,7 +129,8 @@ static char *err_str[] = {
 #endif
 
 #ifdef __MACOSX__
-static char *err_str[] = {
+
+static char *g_err_str[] = {
 	[ESUCCESS] = "Success",
 	[EPERM] = "Operation not permitted",
 	[ENOENT] = "No such file or directory",
@@ -238,19 +240,20 @@ static char *err_str[] = {
 	[EQFULL] = "Interface output queue is full",
 	[EARGS] = "Invalid number of arguments",
 	[ENOTREGISTER] = "Not registered",
-	[EBADRQC] = "Invalid request code"
+	[EBADRQC] = "Invalid request code",
+	[EBADE] = "Invalid exchange"
 };
 #endif
 
 char	*strerror(int err_num)
 {
-	if (err_num < 0 || (unsigned long)err_num >= sizeof(err_str) / sizeof(err_str[0]))
+	if (err_num < 0 ||
+(unsigned long)err_num >= sizeof(g_err_str) / sizeof(g_err_str[0]))
 		return ((void *)0);
-	return (err_str[err_num]);
+	return (g_err_str[err_num]);
 }
 
 void	perror(char *s, int err)
 {
 	ft_fprintf(2, "%s: %s\n", s, strerror(err));
 }
-

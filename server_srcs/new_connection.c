@@ -4,8 +4,6 @@
 #include "libft.h"
 #include <sys/socket.h>
 
-#include "printf.h"
-
 extern bool	handle_new_connections(t_server *server, bool *new_user)
 {
 	int			sock;

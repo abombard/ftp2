@@ -29,7 +29,6 @@ server_close.c\
 listen_socket.c\
 sock.c\
 new_connection.c\
-log.c\
 strerror.c\
 data.c\
 read_data.c\

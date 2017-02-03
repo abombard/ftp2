@@ -1,3 +1,15 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   data.c                                             :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: abombard <marvin@42.fr>                    +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2017/02/03 16:58:40 by abombard          #+#    #+#             */
+/*   Updated: 2017/02/03 17:01:05 by abombard         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "server.h"
 #include "strerror.h"
 #include <stdlib.h>
@@ -29,7 +41,7 @@ extern t_data	*alloc_data(size_t size)
 	return (data);
 }
 
-extern void	free_file(t_data *data)
+extern void		free_file(t_data *data)
 {
 	if (munmap(data->bytes, data->size_max))
 		perror("munmap", errno);
@@ -37,7 +49,7 @@ extern void	free_file(t_data *data)
 		perror("close", errno);
 }
 
-extern void	free_data(t_data *data)
+extern void		free_data(t_data *data)
 {
 	list_del(&data->list);
 	if (data->fd != -1)

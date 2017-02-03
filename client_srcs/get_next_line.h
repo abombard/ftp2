@@ -15,8 +15,9 @@ typedef struct	s_gnl
 	size_t	line_size;
 }				t_gnl;
 
-void	gnl_init(t_gnl *gnl, int fd);
-bool	get_next_line(t_gnl *gnl, t_buf *line);
-bool	gnl_flush(t_gnl *gnl, t_buf *buf);
+void			gnl_init(t_gnl *gnl, int fd);
+bool			get_next_line(t_gnl *gnl, t_buf *line);
+bool			gnl_flush(t_gnl *gnl, t_buf *buf);
+void			gnl_flush_line(t_gnl *gnl);
 
 #endif

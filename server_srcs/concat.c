@@ -1,6 +1,17 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   concat.c                                           :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: abombard <marvin@42.fr>                    +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2017/02/03 16:58:20 by abombard          #+#    #+#             */
+/*   Updated: 2017/02/03 18:14:59 by abombard         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "server.h"
 #include "libft.h"
-#include "log.h"
 
 extern size_t	concat_safe(char *buf, size_t offset, size_t size_max, char *s)
 {

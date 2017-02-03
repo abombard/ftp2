@@ -3,7 +3,7 @@
 #include "libft.h"
 #include <stdlib.h>
 
-static int	build_answer(size_t size, t_data **answer)
+static int		build_answer(size_t size, t_data **answer)
 {
 	char	*size_str;
 	int		err;
@@ -30,8 +30,7 @@ extern int		request_get(int argc, char **argv, t_user *user, t_io *io)
 	if (argc != 2 || ft_strchr(argv[1], '/'))
 		return (EINVAL);
 	concat_path(user->pwd, argv[1], path);
-	file = alloc_data(0);
-	if (!file)
+	if ((file = alloc_data(0)) == NULL)
 		return (errno);
 	err = file_load(path, file);
 	if (err)
@@ -49,4 +48,3 @@ extern int		request_get(int argc, char **argv, t_user *user, t_io *io)
 	list_add_tail(&file->list, &io->datas_out);
 	return (0);
 }
-

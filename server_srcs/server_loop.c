@@ -12,8 +12,7 @@ static bool	fds_availables(int nfds, t_server *server, int *ready)
 		&server->fds[RFDS],
 		&server->fds[WFDS],
 		NULL,
-		&tv
-	);
+		&tv);
 	if (*ready == -1)
 	{
 		if (errno != EINTR)

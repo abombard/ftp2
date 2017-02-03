@@ -10,7 +10,6 @@ extern int		request_cd(int argc, char **argv, t_user *user, t_io *io)
 
 	if (argc > 2)
 		return (E2BIG);
-
 	if (argc == 1)
 		ft_strncpy(path, user->home, PATH_SIZE_MAX);
 	else

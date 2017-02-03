@@ -7,8 +7,6 @@
 # include <pthread.h>
 # include <signal.h>
 
-# define STR_TO_buf(str) { sizeof(str) - 1, str }
-
 typedef struct	s_buf
 {
 	size_t	size;

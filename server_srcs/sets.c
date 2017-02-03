@@ -21,9 +21,7 @@ extern void		sets_prepare(t_server *server, int *nfds)
 {
 	FD_ZERO(&server->fds[RFDS]);
 	FD_ZERO(&server->fds[WFDS]);
-
 	FD_SET(server->listen, &server->fds[RFDS]);
 	*nfds = server->listen + 1;
-
 	fds_set(&server->io_list, server->fds, nfds);
 }

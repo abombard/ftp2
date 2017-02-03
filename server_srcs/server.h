@@ -49,6 +49,7 @@ typedef struct	s_io
 */
 # define NAME_SIZE_MAX	63
 # define PATH_SIZE_MAX	255
+
 typedef struct	s_user
 {
 	char	name[NAME_SIZE_MAX + 1];
@@ -127,7 +128,8 @@ extern t_io		*get_io(int sock, t_server *server);
 extern void		io_input_teardown(t_io *io);
 extern int		create_io(int sock, t_server *server);
 extern void		delete_io(t_io *io);
-extern void		foreach_io(t_server *server, bool (*io_func)(t_server *, t_io *));
+extern void		foreach_io(t_server *server,
+						bool (*io_func)(t_server *, t_io *));
 
 /*
 ** set
